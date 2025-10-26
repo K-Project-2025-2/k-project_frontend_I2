@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Image,
   View,
   Text,
   TextInput,
@@ -7,6 +8,7 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 
 const LoginScreen = ({ navigation }) => {
@@ -23,8 +25,7 @@ const LoginScreen = ({ navigation }) => {
       setError('비밀번호를 입력하세요.');
       return;
     }
-
-    // 로그인 성공 시 메인 화면으로 이동
+    setError('');
     navigation.replace('Main');
   };
 
@@ -33,58 +34,59 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      
-      <View style={styles.card}>
-        <Text style={styles.title}>로그인</Text>
-        
-        {/* 학교 이메일 섹션 */}
-        <View style={styles.inputSection}>
-          <Text style={styles.label}>학교 이메일</Text>
-          <View style={styles.emailContainer}>
-            <TextInput
-              style={styles.emailInput}
-              placeholder="아이디"
-              placeholderTextColor="#999"
-              value={emailId}
-              onChangeText={setEmailId}
-            />
-            <View style={styles.domainContainer}>
-              <Text style={styles.domainText}>@kangnam.ac.kr</Text>
+
+      <View style={styles.mainContent}>
+        <Image
+          source={require('../assets/login_logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+
+        <View style={styles.formContainer}>
+          <View style={styles.inputSection}>
+            <Text style={styles.label}>학교 이메일</Text>
+            <View style={styles.emailContainer}>
+              <TextInput
+                style={styles.emailInput}
+                placeholderTextColor="#999"
+                value={emailId}
+                onChangeText={setEmailId}
+              />
+              <View style={styles.domainContainer}>
+                <Text style={styles.domainText}>@kangnam.ac.kr</Text>
+              </View>
             </View>
           </View>
+
+          <View style={styles.inputSection}>
+            <Text style={styles.label}>비밀번호</Text>
+            <TextInput
+              style={styles.passwordInput}
+              placeholderTextColor="#999"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+            <Text style={styles.loginButtonText}>로그인</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* 비밀번호 섹션 */}
-        <View style={styles.inputSection}>
-          <Text style={styles.label}>비밀번호</Text>
-          <TextInput
-            style={styles.passwordInput}
-            placeholder="비밀번호"
-            placeholderTextColor="#999"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
-
-        {/* 에러 메시지 */}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        {/* 로그인 버튼 */}
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>로그인</Text>
-        </TouchableOpacity>
-
-        {/* 회원가입 링크 */}
-        <TouchableOpacity onPress={handleSignup}>
-          <Text style={styles.signupText}>
-            계정이 없으신가요? <Text style={styles.signupLink}>회원가입</Text>
-          </Text>
-        </TouchableOpacity>
       </View>
-    </View>
+
+
+      <TouchableOpacity onPress={handleSignup}>
+        <Text style={styles.signupText}>
+          계정이 없으신가요? <Text style={styles.signupLink}>회원가입</Text>
+        </Text>
+      </TouchableOpacity>
+
+    </SafeAreaView>
   );
 };
 
@@ -92,34 +94,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 40,
+
+    paddingTop: 80,
+    paddingBottom: 40,
+    // ---
   },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 30,
+  mainContent: {
     width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 30,
+  logo: {
+    width: 150,
+    height: 150,
+    borderRadius: 50,
+    marginBottom: 40,
+  },
+  formContainer: {
+    width: '100%',
+    alignItems: 'center',
   },
   inputSection: {
     marginBottom: 20,
+    width: '100%',
   },
   label: {
     fontSize: 16,
@@ -132,13 +131,11 @@ const styles = StyleSheet.create({
   },
   emailInput: {
     flex: 1,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 5,
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: 'white',
     marginRight: 8,
   },
   domainContainer: {
@@ -153,13 +150,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   passwordInput: {
-    borderWidth: 1,
+    width: '100%',
+    borderBottomWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 5,
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: 'white',
   },
   errorText: {
     color: '#e74c3c',
@@ -171,7 +167,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 15,
     alignItems: 'center',
-    marginBottom: 20,
+    width: '100%',
   },
   loginButtonText: {
     color: 'white',

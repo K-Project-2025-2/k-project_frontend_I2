@@ -7,6 +7,7 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  ScrollView,
 } from 'react-native';
 
 const RegisterScreen = ({ navigation }) => {
@@ -71,43 +72,45 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      
+
       <View style={styles.card}>
         <Text style={styles.title}>회원가입</Text>
-        
+
         {/* 이름 */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>이름</Text>
           <TextInput
             style={styles.input}
-            placeholder="이름"
+            placeholder="이름을 입력하세요."
             placeholderTextColor="#999"
             value={name}
             onChangeText={setName}
           />
         </View>
 
-        {/* 학번 */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>학번</Text>
           <TextInput
             style={styles.input}
-            placeholder="학번"
+            placeholder="학번을 입력하세요."
             placeholderTextColor="#999"
             value={studentId}
             onChangeText={setStudentId}
+            keyboardType="numeric"
           />
         </View>
 
-        {/* 학교 이메일 */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>학교 이메일</Text>
           <View style={styles.emailRow}>
             <TextInput
               style={styles.emailInput}
-              placeholder="아이디"
+              placeholder="이메일"
               placeholderTextColor="#999"
               value={emailId}
               onChangeText={setEmailId}
@@ -122,10 +125,11 @@ const RegisterScreen = ({ navigation }) => {
           <View style={styles.verificationRow}>
             <TextInput
               style={styles.verificationInput}
-              placeholder="인증번호"
+              placeholder="인증번호를 입력하세요."
               placeholderTextColor="#999"
               value={verificationCode}
               onChangeText={setVerificationCode}
+              keyboardType="number-pad"
             />
             <TouchableOpacity style={styles.verifyConfirmButton} onPress={handleVerification}>
               <Text style={styles.verifyConfirmButtonText}>인증확인</Text>
@@ -133,12 +137,11 @@ const RegisterScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* 비밀번호 */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>비밀번호</Text>
           <TextInput
             style={styles.input}
-            placeholder="비밀번호"
+            placeholder="비밀번호를 입력하세요."
             placeholderTextColor="#999"
             secureTextEntry
             value={password}
@@ -146,7 +149,6 @@ const RegisterScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* 비밀번호 확인 */}
         <View style={styles.inputSection}>
           <TextInput
             style={styles.input}
@@ -158,25 +160,23 @@ const RegisterScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* 회원가입 버튼 */}
         <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
           <Text style={styles.registerButtonText}>회원가입</Text>
         </TouchableOpacity>
 
-        {/* 로그인 링크 */}
         <TouchableOpacity onPress={handleLogin}>
           <Text style={styles.loginText}>
             이미 계정이 있으신가요? <Text style={styles.loginLink}>로그인</Text>
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
@@ -213,13 +213,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 5,
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: 'white',
   },
   emailRow: {
     flexDirection: 'row',
@@ -228,13 +226,12 @@ const styles = StyleSheet.create({
   },
   emailInput: {
     flex: 1,
-    borderWidth: 1,
+
+    borderBottomWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 5,
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: 'white',
     marginRight: 8,
   },
   domainButton: {
@@ -266,13 +263,13 @@ const styles = StyleSheet.create({
   },
   verificationInput: {
     flex: 1,
-    borderWidth: 1,
+
+    borderBottomWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 5,
+    // ---
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: 'white',
     marginRight: 8,
   },
   verifyConfirmButton: {
