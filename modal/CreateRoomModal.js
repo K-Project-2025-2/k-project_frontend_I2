@@ -1,0 +1,643 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  ScrollView,
+  TextInput,
+} from 'react-native';
+
+// 위치 목록
+const LOCATIONS = [
+  '기흥3번출',
+  '기흥4번출',
+  '강남대역',
+  '샬롬관',
+  '인사관',
+  '이공관',
+  '천은관',
+  '심전관',
+  '교육관',
+  '예술관',
+];
+
+const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoomCreated }) => {
+  // 출발지, 도착지 상태 (API 명세서: departure, destination)
+  const [departure, setDeparture] = useState('');
+  const [destination, setDestination] = useState('');
+  // 인원 설정 (2, 3, 4) - API 명세서: max_members
+  const [maxMembers, setMaxMembers] = useState(4);
+  // 초대코드 설정 (ON/OFF)
+  const [inviteCodeEnabled, setInviteCodeEnabled] = useState(true);
+  // 직접 입력 모드
+  const [directInputMode, setDirectInputMode] = useState(false);
+  const [directDeparture, setDirectDeparture] = useState('');
+  const [directDestination, setDirectDestination] = useState('');
+  // 방 생성 완료 화면 표시 여부
+  const [showCompleteScreen, setShowCompleteScreen] = useState(false);
+  // 생성된 방 데이터
+  const [createdRoomData, setCreatedRoomData] = useState(null);
+
+  // 위치 선택 핸들러
+  const handleLocationSelect = (location) => {
+    if (location === '직접 입력') {
+      setDirectInputMode(true);
+      return;
+    }
+
+    if (!departure) {
+      setDeparture(location);
+    } else if (!destination) {
+      setDestination(location);
+    } else {
+      // 둘 다 선택되어 있으면 도착지만 변경
+      setDestination(location);
+    }
+  };
+
+  // 직접 입력 완료
+  const handleDirectInputComplete = () => {
+    if (directInputMode) {
+      if (!departure && directDeparture) {
+        setDeparture(directDeparture);
+      } else if (!destination && directDestination) {
+        setDestination(directDestination);
+      }
+      setDirectInputMode(false);
+      setDirectDeparture('');
+      setDirectDestination('');
+    }
+  };
+
+  // 초기화
+  const handleReset = () => {
+    setDeparture('');
+    setDestination('');
+    setMaxMembers(4);
+    setInviteCodeEnabled(true);
+    setDirectInputMode(false);
+    setDirectDeparture('');
+    setDirectDestination('');
+  };
+
+  // 완료 핸들러 - 방 생성 완료 화면으로 전환
+  const handleComplete = () => {
+    if (!departure || !destination) {
+      alert('출발지와 도착지를 모두 선택해주세요.');
+      return;
+    }
+
+    // 초대코드 생성 (옵션)
+    const inviteCode = inviteCodeEnabled
+      ? Math.floor(100000 + Math.random() * 900000).toString()
+      : null;
+
+    // API 명세서에 맞춘 방 데이터 구조
+    // 실제로는 createRoom API를 호출해야 하지만, 지금은 임시 데이터 생성
+    const roomData = {
+      room_id: nextRoomId, // API: room_id (number) - 100부터 순차적으로 증가
+      departure, // API: departure
+      destination, // API: destination
+      max_members: maxMembers, // API: max_members
+      current_count: 1, // 생성자는 자동으로 포함
+      host_id: null, // API에서 받아올 값
+      status: 'OPEN', // API: OPEN, CLOSED
+      invite_code: inviteCode, // API: 초대코드 (옵션)
+      invite_code_enabled: inviteCodeEnabled,
+      // UI 표시용 추가 필드
+      members: `1/${maxMembers}`,
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    // 방 생성 완료 화면 표시
+    setCreatedRoomData(roomData);
+    setShowCompleteScreen(true);
+    
+    // 다음 방번호 업데이트
+    if (onRoomCreated) {
+      onRoomCreated(nextRoomId);
+    }
+  };
+
+  // 채팅 시작하기 버튼 클릭 - 실제 채팅방으로 이동
+  const handleStartChatting = () => {
+    if (createdRoomData) {
+      onComplete(createdRoomData);
+      handleReset();
+      setShowCompleteScreen(false);
+      setCreatedRoomData(null);
+    }
+  };
+
+  // 모달 닫기 시 초기화
+  const handleClose = () => {
+    handleReset();
+    setShowCompleteScreen(false);
+    setCreatedRoomData(null);
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={handleClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          {/* 방 생성 완료 화면 */}
+          {showCompleteScreen && createdRoomData ? (
+            <View style={styles.completeScreen}>
+              {/* 상단 헤더 */}
+              <View style={styles.completeHeader}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={handleClose}
+                >
+                  <Text style={styles.cancelButtonText}>←</Text>
+                </TouchableOpacity>
+                <Text style={styles.completeHeaderTitle}>방생성</Text>
+                <View style={styles.cancelButtonPlaceholder} />
+              </View>
+
+              {/* 방 정보 카드 */}
+              <View style={styles.roomInfoCard}>
+                <View style={styles.roomInfoRow}>
+                  <Text style={styles.roomInfoLabel}>방번호</Text>
+                  <Text style={styles.roomInfoValue}>{createdRoomData.room_id}</Text>
+                </View>
+                <View style={styles.roomInfoRow}>
+                  <Text style={styles.roomInfoLabel}>출발지</Text>
+                  <Text style={styles.roomInfoValue}>{createdRoomData.departure}</Text>
+                </View>
+                <View style={styles.roomInfoRow}>
+                  <Text style={styles.roomInfoLabel}>도착지</Text>
+                  <Text style={styles.roomInfoValue}>{createdRoomData.destination}</Text>
+                </View>
+                <View style={styles.roomInfoRow}>
+                  <Text style={styles.roomInfoLabel}>인원</Text>
+                  <Text style={styles.roomInfoValue}>{createdRoomData.members}</Text>
+                </View>
+                <View style={[styles.roomInfoRow, styles.roomInfoRowLast]}>
+                  <Text style={styles.roomInfoLabel}>초대 코드</Text>
+                  <Text style={styles.roomInfoValue}>
+                    {createdRoomData.invite_code_enabled ? createdRoomData.invite_code : 'OFF'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* 채팅 시작하기 버튼 */}
+              <TouchableOpacity
+                style={styles.startChattingButton}
+                onPress={handleStartChatting}
+              >
+                <Text style={styles.startChattingButtonText}>채팅 시작하기</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {/* 모달 헤더 */}
+              <View style={styles.modalHeader}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={handleClose}
+                >
+                  <Text style={styles.cancelButtonText}>←</Text>
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>방생성</Text>
+                <View style={styles.cancelButtonPlaceholder} />
+              </View>
+
+              <ScrollView style={styles.modalBody}>
+            {/* 출발지/도착지 섹션 */}
+            <View style={styles.locationSection}>
+              <View style={styles.locationRow}>
+                <Text style={styles.locationLabel}>출발지</Text>
+                <TextInput
+                  style={styles.locationInput}
+                  placeholder="출발지 선택"
+                  value={departure}
+                  editable={false}
+                />
+              </View>
+              <View style={styles.locationRow}>
+                <Text style={styles.locationLabel}>도착지</Text>
+                <TextInput
+                  style={styles.locationInput}
+                  placeholder="도착지 선택"
+                  value={destination}
+                  editable={false}
+                />
+              </View>
+            </View>
+
+            {/* 직접 입력 모드 */}
+            {directInputMode && (
+              <View style={styles.directInputSection}>
+                <Text style={styles.directInputLabel}>직접 입력</Text>
+                <TextInput
+                  style={styles.directInputField}
+                  placeholder="출발지 직접 입력"
+                  value={directDeparture}
+                  onChangeText={setDirectDeparture}
+                />
+                <TextInput
+                  style={styles.directInputField}
+                  placeholder="도착지 직접 입력"
+                  value={directDestination}
+                  onChangeText={setDirectDestination}
+                />
+                <TouchableOpacity
+                  style={styles.directInputButton}
+                  onPress={handleDirectInputComplete}
+                >
+                  <Text style={styles.directInputButtonText}>입력 완료</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* 위치 선택 버튼 그리드 */}
+            <View style={styles.locationGrid}>
+              {LOCATIONS.map((location, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.locationButton}
+                  onPress={() => handleLocationSelect(location)}
+                >
+                  <Text style={styles.locationButtonText}>{location}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={() => handleLocationSelect('직접 입력')}
+              >
+                <Text style={styles.locationButtonText}>직접 입력</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 인원 설정 */}
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>인원설정</Text>
+              <View style={styles.settingOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.settingOption,
+                    maxMembers === 2 && styles.settingOptionActive,
+                  ]}
+                  onPress={() => setMaxMembers(2)}
+                >
+                  <Text
+                    style={[
+                      styles.settingOptionText,
+                      maxMembers === 2 && styles.settingOptionTextActive,
+                    ]}
+                  >
+                    2/4
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.settingOption,
+                    maxMembers === 3 && styles.settingOptionActive,
+                  ]}
+                  onPress={() => setMaxMembers(3)}
+                >
+                  <Text
+                    style={[
+                      styles.settingOptionText,
+                      maxMembers === 3 && styles.settingOptionTextActive,
+                    ]}
+                  >
+                    3/4
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.settingOption,
+                    maxMembers === 4 && styles.settingOptionActive,
+                  ]}
+                  onPress={() => setMaxMembers(4)}
+                >
+                  <Text
+                    style={[
+                      styles.settingOptionText,
+                      maxMembers === 4 && styles.settingOptionTextActive,
+                    ]}
+                  >
+                    4/4
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 초대코드 설정 */}
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>초대코드설정</Text>
+              <View style={styles.settingOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.settingOption,
+                    inviteCodeEnabled && styles.settingOptionActive,
+                  ]}
+                  onPress={() => setInviteCodeEnabled(true)}
+                >
+                  <Text
+                    style={[
+                      styles.settingOptionText,
+                      inviteCodeEnabled && styles.settingOptionTextActive,
+                    ]}
+                  >
+                    ON
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.settingOption,
+                    !inviteCodeEnabled && styles.settingOptionActive,
+                  ]}
+                  onPress={() => setInviteCodeEnabled(false)}
+                >
+                  <Text
+                    style={[
+                      styles.settingOptionText,
+                      !inviteCodeEnabled && styles.settingOptionTextActive,
+                    ]}
+                  >
+                    OFF
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* 하단 버튼 */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={[styles.footerButton, styles.resetButton]}
+              onPress={handleReset}
+            >
+              <Text style={styles.footerButtonText}>초기화</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.footerButton, styles.completeButton]}
+              onPress={handleComplete}
+            >
+              <Text style={[styles.footerButtonText, styles.completeButtonText]}>
+                완료
+              </Text>
+            </TouchableOpacity>
+          </View>
+            </>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '80%',
+    backgroundColor: '#E0E0E0',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#4A90E2',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  cancelButton: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 24,
+    color: '#333',
+    fontWeight: 'bold',
+  },
+  cancelButtonPlaceholder: {
+    width: 30,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+    textAlign: 'center',
+  },
+  modalBody: {
+    padding: 15,
+  },
+  // 위치 섹션
+  locationSection: {
+    marginBottom: 15,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  locationLabel: {
+    width: 60,
+    fontSize: 16,
+    color: '#333',
+  },
+  locationInput: {
+    flex: 1,
+    backgroundColor: '#E0E0E0',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 4,
+    fontSize: 14,
+    color: '#333',
+  },
+  // 직접 입력 섹션
+  directInputSection: {
+    backgroundColor: 'white',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  directInputLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  directInputField: {
+    backgroundColor: '#E0E0E0',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 4,
+    marginBottom: 10,
+    fontSize: 14,
+    color: '#333',
+  },
+  directInputButton: {
+    backgroundColor: '#4A90E2',
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  directInputButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  // 위치 버튼 그리드
+  locationGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  locationButton: {
+    width: '23%',
+    backgroundColor: '#E0E0E0',
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  locationButtonText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  // 설정 섹션
+  settingSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  settingLabel: {
+    width: 100,
+    fontSize: 16,
+    color: '#333',
+  },
+  settingOptions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  settingOption: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#E0E0E0',
+  },
+  settingOptionActive: {
+    backgroundColor: '#4A90E2',
+  },
+  settingOptionText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  settingOptionTextActive: {
+    color: 'white',
+  },
+  // 모달 푸터
+  modalFooter: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#ccc',
+  },
+  footerButton: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  resetButton: {
+    backgroundColor: '#E0E0E0',
+  },
+  completeButton: {
+    backgroundColor: '#4A90E2',
+  },
+  footerButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  completeButtonText: {
+    color: 'white',
+  },
+  // 방 생성 완료 화면 스타일
+  completeScreen: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  completeHeader: {
+    flexDirection: 'row',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  completeHeaderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+    textAlign: 'center',
+  },
+  roomInfoCard: {
+    width: '100%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+  },
+  roomInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  roomInfoRowLast: {
+    marginBottom: 0,
+    marginTop: 10,
+  },
+  roomInfoLabel: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  roomInfoValue: {
+    fontSize: 16,
+    color: '#333',
+  },
+  startChattingButton: {
+    width: '100%',
+    backgroundColor: '#666',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  startChattingButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+});
+
+export default CreateRoomModal;
+
