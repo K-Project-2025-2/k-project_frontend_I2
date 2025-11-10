@@ -59,16 +59,23 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
 
   // 직접 입력 완료
   const handleDirectInputComplete = () => {
-    if (directInputMode) {
-      if (!departure && directDeparture) {
-        setDeparture(directDeparture);
-      } else if (!destination && directDestination) {
-        setDestination(directDestination);
-      }
-      setDirectInputMode(false);
-      setDirectDeparture('');
-      setDirectDestination('');
+    // 출발지와 도착지를 각각 입력된 값으로 설정
+    if (directDeparture) {
+      setDeparture(directDeparture);
     }
+    if (directDestination) {
+      setDestination(directDestination);
+    }
+    setDirectInputMode(false);
+    setDirectDeparture('');
+    setDirectDestination('');
+  };
+
+  // 직접 입력 모달 닫기
+  const handleDirectInputClose = () => {
+    setDirectInputMode(false);
+    setDirectDeparture('');
+    setDirectDestination('');
   };
 
   // 초기화
@@ -107,7 +114,7 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
       invite_code: inviteCode, // API: 초대코드 (옵션)
       invite_code_enabled: inviteCodeEnabled,
       // UI 표시용 추가 필드
-      members: `1/${maxMembers}`,
+      members: `${maxMembers}명`,
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     };
 
@@ -234,42 +241,31 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
               </View>
             </View>
 
-            {/* 직접 입력 모드 */}
-            {directInputMode && (
-              <View style={styles.directInputSection}>
-                <Text style={styles.directInputLabel}>직접 입력</Text>
-                <TextInput
-                  style={styles.directInputField}
-                  placeholder="출발지 직접 입력"
-                  value={directDeparture}
-                  onChangeText={setDirectDeparture}
-                />
-                <TextInput
-                  style={styles.directInputField}
-                  placeholder="도착지 직접 입력"
-                  value={directDestination}
-                  onChangeText={setDirectDestination}
-                />
-                <TouchableOpacity
-                  style={styles.directInputButton}
-                  onPress={handleDirectInputComplete}
-                >
-                  <Text style={styles.directInputButtonText}>입력 완료</Text>
-                </TouchableOpacity>
-              </View>
-            )}
 
             {/* 위치 선택 버튼 그리드 */}
             <View style={styles.locationGrid}>
-              {LOCATIONS.map((location, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.locationButton}
-                  onPress={() => handleLocationSelect(location)}
-                >
-                  <Text style={styles.locationButtonText}>{location}</Text>
-                </TouchableOpacity>
-              ))}
+              {LOCATIONS.map((location, index) => {
+                const isSelected = departure === location || destination === location;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.locationButton,
+                      isSelected && styles.settingOptionActive,
+                    ]}
+                    onPress={() => handleLocationSelect(location)}
+                  >
+                    <Text
+                      style={[
+                        styles.locationButtonText,
+                        isSelected && styles.settingOptionTextActive,
+                      ]}
+                    >
+                      {location}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
               <TouchableOpacity
                 style={styles.locationButton}
                 onPress={() => handleLocationSelect('직접 입력')}
@@ -295,7 +291,7 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
                       maxMembers === 2 && styles.settingOptionTextActive,
                     ]}
                   >
-                    2/4
+                    2명
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -311,7 +307,7 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
                       maxMembers === 3 && styles.settingOptionTextActive,
                     ]}
                   >
-                    3/4
+                    3명
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -327,7 +323,7 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
                       maxMembers === 4 && styles.settingOptionTextActive,
                     ]}
                   >
-                    4/4
+                    4명
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -394,6 +390,58 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
           )}
         </View>
       </View>
+
+      {/* 직접 입력 모달 */}
+      <Modal
+        visible={directInputMode}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleDirectInputClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.directInputModalContent}>
+            {/* 직접 입력 모달 헤더 */}
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={handleDirectInputClose}
+              >
+                <Text style={styles.cancelButtonText}>←</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>직접 입력</Text>
+              <View style={styles.cancelButtonPlaceholder} />
+            </View>
+
+            {/* 직접 입력 필드 */}
+            <View style={styles.directInputModalBody}>
+              <View style={styles.directInputFieldContainer}>
+                <Text style={styles.directInputLabel}>출발지</Text>
+                <TextInput
+                  style={styles.directInputField}
+                  placeholder="출발지 직접 입력"
+                  value={directDeparture}
+                  onChangeText={setDirectDeparture}
+                />
+              </View>
+              <View style={styles.directInputFieldContainer}>
+                <Text style={styles.directInputLabel}>도착지</Text>
+                <TextInput
+                  style={styles.directInputField}
+                  placeholder="도착지 직접 입력"
+                  value={directDestination}
+                  onChangeText={setDirectDestination}
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.directInputButton}
+                onPress={handleDirectInputComplete}
+              >
+                <Text style={styles.directInputButtonText}>입력 완료</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -471,37 +519,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  // 직접 입력 섹션
-  directInputSection: {
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 8,
+  // 직접 입력 모달
+  directInputModalContent: {
+    width: '80%',
+    maxHeight: '60%',
+    backgroundColor: '#E0E0E0',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#4A90E2',
+    overflow: 'hidden',
+  },
+  directInputModalBody: {
+    padding: 20,
+  },
+  directInputFieldContainer: {
     marginBottom: 15,
   },
   directInputLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 8,
     color: '#333',
   },
   directInputField: {
-    backgroundColor: '#E0E0E0',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 4,
-    marginBottom: 10,
+    backgroundColor: 'white',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 6,
     fontSize: 14,
     color: '#333',
+    borderWidth: 1,
+    borderColor: '#ccc',
   },
   directInputButton: {
     backgroundColor: '#4A90E2',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 6,
     alignItems: 'center',
+    marginTop: 10,
   },
   directInputButtonText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   // 위치 버튼 그리드
@@ -512,12 +571,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   locationButton: {
-    width: '23%',
     backgroundColor: '#E0E0E0',
-    paddingVertical: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
     borderRadius: 6,
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
   },
   locationButtonText: {
     fontSize: 14,

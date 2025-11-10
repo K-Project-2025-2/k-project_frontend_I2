@@ -6,37 +6,75 @@ import {
   StyleSheet,
   Modal,
   TextInput,
+  Alert,
 } from 'react-native';
 
-const InviteCodeModal = ({ visible, onClose, onEnter }) => {
+const InviteCodeModal = ({ visible, onClose, onEnter, onCodeFailed, targetRoom = null, allRooms = [] }) => {
   const [inviteCode, setInviteCode] = useState('');
+
+  // 모달이 닫힐 때 초대코드 초기화
+  React.useEffect(() => {
+    if (!visible) {
+      setInviteCode('');
+    }
+  }, [visible]);
 
   // 초대코드 입력 후 채팅방 입장
   const handleEnter = () => {
-    if (!inviteCode.trim()) {
-      alert('초대코드를 입력해주세요.');
+    const trimmedCode = inviteCode.trim();
+    
+    // 6자리 숫자 검증
+    if (!trimmedCode) {
+      Alert.alert('알림', '초대코드를 입력해주세요.');
       return;
     }
 
-    // 실제로는 서버에서 room_id로 방 정보를 조회해야 함 (getRoomDetail API)
-    // 여기서는 임시 데이터 생성 (API 명세서 구조에 맞춤)
-    const roomId = parseInt(inviteCode.trim());
-    const trimmedCode = inviteCode.trim();
-    const roomData = {
-      room_id: isNaN(roomId) ? Math.floor(1000 + Math.random() * 9000) : roomId,
-      departure: '기흥역',
-      destination: '이공관',
-      current_count: 2,
-      max_members: 4,
-      host_id: null,
-      status: 'OPEN',
-      invite_code: trimmedCode,
-      invite_code_enabled: true,
-      // UI 표시용
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-    };
+    if (trimmedCode.length !== 6 || !/^\d{6}$/.test(trimmedCode)) {
+      Alert.alert('알림', '존재하지 않는 방입니다');
+      setInviteCode('');
+      return;
+    }
 
-    onEnter(roomData);
+    // 특정 방에 대한 초대코드 검증 (targetRoom이 있는 경우)
+    // 채팅방 목록에서 입장 버튼 클릭 시 특정 방의 초대코드 검증
+    if (targetRoom && targetRoom.invite_code_enabled) {
+      if (trimmedCode !== targetRoom.invite_code) {
+        // 코드가 틀렸을 때 틀린 횟수 증가
+        if (onCodeFailed) {
+          onCodeFailed(targetRoom.room_id);
+        }
+        Alert.alert('알림', '코드가 틀렸습니다');
+        setInviteCode('');
+        return;
+      }
+      // 초대코드가 맞으면 해당 방으로 입장
+      const roomData = {
+        ...targetRoom,
+        current_count: (targetRoom.current_count || 0) + 1,
+      };
+      onEnter(roomData, trimmedCode);
+      setInviteCode('');
+      return;
+    }
+
+    // 모든 방 목록에서 초대코드로 방 찾기
+    // availableRooms와 participatingRooms를 합쳐서 검색
+    const foundRoom = allRooms.find(
+      (room) => room.invite_code_enabled && room.invite_code === trimmedCode
+    );
+
+    if (!foundRoom) {
+      Alert.alert('알림', '존재하지 않는 방입니다');
+      setInviteCode('');
+      return;
+    }
+
+    // 초대코드가 맞는 방을 찾았으면 해당 방으로 입장
+    const roomData = {
+      ...foundRoom,
+      current_count: (foundRoom.current_count || 0) + 1,
+    };
+    onEnter(roomData, trimmedCode);
     setInviteCode('');
   };
 
@@ -67,7 +105,7 @@ const InviteCodeModal = ({ visible, onClose, onEnter }) => {
               <Text style={styles.inputLabel}>초대 코드</Text>
               <TextInput
                 style={styles.inputField}
-                placeholder="입력"
+                placeholder="6자리 입력"
                 value={inviteCode}
                 onChangeText={setInviteCode}
                 keyboardType="numeric"

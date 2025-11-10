@@ -7,16 +7,22 @@ import {
   StatusBar,
   ScrollView,
   Modal,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CreateRoomModal from '../modal/CreateRoomModal';
 import InviteCodeModal from '../modal/InviteCodeModal';
 import MemberCounter from '../components/MemberCounter';
+import LockIcon from '../components/LockIcon';
 
 const TaxiScreen = ({ navigation }) => {
   const [selectedTab, setSelectedTab] = useState('taxi');
   const [createRoomModalVisible, setCreateRoomModalVisible] = useState(false);
   const [inviteCodeModalVisible, setInviteCodeModalVisible] = useState(false);
+  // 초대코드로 입장하려는 방 정보
+  const [selectedRoomForInvite, setSelectedRoomForInvite] = useState(null);
+  // 각 방별 초대코드 틀린 횟수 추적 (room_id를 키로 사용)
+  const [roomFailedAttempts, setRoomFailedAttempts] = useState({});
   // 참여중인 채팅방 목록 상태 (API 명세서에 맞춘 구조)
   const [participatingRooms, setParticipatingRooms] = useState([
     // 예시 데이터 - 실제로는 AsyncStorage나 서버에서 가져올 데이터
@@ -27,12 +33,14 @@ const TaxiScreen = ({ navigation }) => {
   // TODO: 실제로는 서버 API에서 방 목록을 가져와야 함
   const [availableRooms, setAvailableRooms] = useState([
     {
-      room_id: 2001,
+      room_id: 100,
       departure: '기흥3번출',
       destination: '샬롬관',
       current_count: 2,
       max_members: 4,
       host_id: null,
+      invite_code_enabled: true, // 초대코드 on
+      invite_code: '123456', // 초대코드
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -112,11 +120,33 @@ const TaxiScreen = ({ navigation }) => {
   };
 
   // 초대코드로 입장 후 채팅방으로 이동
-  const handleInviteCodeEntered = (roomData) => {
+  const handleInviteCodeEntered = (roomData, enteredCode) => {
     setInviteCodeModalVisible(false);
+    setSelectedRoomForInvite(null);
+    // 초대코드가 맞았으므로 틀린 횟수 리셋
+    if (roomData.room_id) {
+      setRoomFailedAttempts((prev) => {
+        const updated = { ...prev };
+        delete updated[roomData.room_id];
+        return updated;
+      });
+    }
     // 참여중인 채팅방 목록에 추가하지 않음 (운행 시작 시에만 추가)
     // 채팅방으로 이동
     navigateToChat(roomData, false);
+  };
+
+  // 초대코드가 틀렸을 때 호출되는 콜백
+  const handleCodeFailed = (roomId) => {
+    if (roomId) {
+      setRoomFailedAttempts((prev) => {
+        const currentCount = prev[roomId] || 0;
+        return {
+          ...prev,
+          [roomId]: currentCount + 1,
+        };
+      });
+    }
   };
 
   // 참여중인 채팅방 입장
@@ -167,7 +197,12 @@ const TaxiScreen = ({ navigation }) => {
               const maxMembers = 4; // 항상 4명으로 고정
               return (
                 <View key={room.room_id} style={styles.roomItem}>
-                  <Text style={styles.roomNumberText}>{room.room_id}</Text>
+                  <View style={styles.roomNumberWithLock}>
+                    <Text style={styles.roomNumberText}>{room.room_id}</Text>
+                    {room.invite_code_enabled && (
+                      <LockIcon size={18} />
+                    )}
+                  </View>
                   <View style={styles.destinationContainer}>
                     <Text style={styles.destinationText}>{room.departure || '출발지'}</Text>
                     <Text style={styles.destinationArrow}>→</Text>
@@ -203,10 +238,20 @@ const TaxiScreen = ({ navigation }) => {
             const maxMembers = 4; // 항상 4명으로 고정
             return (
               <View key={room.room_id} style={styles.roomListItem}>
-                <Text style={styles.roomListNumber}>{room.room_id}</Text>
-                <Text style={styles.roomListDestination}>
-                  {room.departure || '출발지'} → {room.destination || '도착지'}
-                </Text>
+                <View style={styles.roomNumberWithLock}>
+                  <Text style={styles.roomListNumber}>{room.room_id}</Text>
+                  {room.invite_code_enabled && (
+                    <LockIcon size={18} />
+                  )}
+                </View>
+                <View style={styles.roomListDestination}>
+                  <Text style={styles.roomListDestinationText}>
+                    {room.departure || '출발지'}
+                  </Text>
+                  <Text style={styles.roomListDestinationText}>
+                    → {room.destination || '도착지'}
+                  </Text>
+                </View>
                 <Text style={styles.roomListTime}>{room.time || ''}</Text>
                 <View style={styles.roomListMemberCounter}>
                   <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
@@ -214,12 +259,26 @@ const TaxiScreen = ({ navigation }) => {
                 <TouchableOpacity 
                   style={styles.roomListEnterButton}
                   onPress={() => {
-                    // 방 입장 처리
-                    const roomData = {
-                      ...room,
-                      current_count: room.current_count + 1,
-                    };
-                    handleInviteCodeEntered(roomData);
+                    // 초대코드가 필요한 방인지 확인
+                    if (room.invite_code_enabled) {
+                      // 틀린 횟수가 3회 이상인지 확인
+                      const failedCount = roomFailedAttempts[room.room_id] || 0;
+                      if (failedCount >= 3) {
+                        Alert.alert('알림', '입장이 제한 됩니다');
+                        return;
+                      }
+                      // 초대코드 모달 열기
+                      setInviteCodeModalVisible(true);
+                      // 선택된 방 정보 저장 (초대코드 검증용)
+                      setSelectedRoomForInvite(room);
+                    } else {
+                      // 자유롭게 입장
+                      const roomData = {
+                        ...room,
+                        current_count: room.current_count + 1,
+                      };
+                      handleInviteCodeEntered(roomData);
+                    }
                   }}
                 >
                   <Text style={styles.roomListEnterButtonText}>입장</Text>
@@ -277,8 +336,14 @@ const TaxiScreen = ({ navigation }) => {
       {/* 초대코드 입장 모달 */}
       <InviteCodeModal
         visible={inviteCodeModalVisible}
-        onClose={() => setInviteCodeModalVisible(false)}
+        onClose={() => {
+          setInviteCodeModalVisible(false);
+          setSelectedRoomForInvite(null);
+        }}
         onEnter={handleInviteCodeEntered}
+        onCodeFailed={handleCodeFailed}
+        targetRoom={selectedRoomForInvite}
+        allRooms={[...availableRooms, ...participatingRooms]}
       />
     </SafeAreaView>
   );
@@ -362,12 +427,17 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     alignItems: 'center',
   },
+  roomNumberWithLock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 50,
+    marginRight: 10,
+    gap: 6,
+  },
   roomNumberText: {
     fontSize: 14,
     color: '#333',
     textAlign: 'left',
-    minWidth: 50,
-    marginRight: 10,
   },
   roomItemText: {
     flex: 1,
@@ -437,15 +507,24 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     alignItems: 'center',
   },
+  roomNumberWithLock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 50,
+    marginRight: 10,
+    gap: 6,
+  },
   roomListNumber: {
     fontSize: 14,
     color: '#333',
     textAlign: 'left',
-    minWidth: 50,
-    marginRight: 10,
   },
   roomListDestination: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roomListDestinationText: {
     fontSize: 12,
     color: '#333',
     textAlign: 'center',

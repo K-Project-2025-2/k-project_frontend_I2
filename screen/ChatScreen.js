@@ -38,8 +38,8 @@ const ChatScreen = ({ navigation, route }) => {
   const { roomData, onLeaveRoom, onAddToParticipatingRooms, isFromCreate } = route.params || {};
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
-  // 입력 칸과 버튼 표시 여부 상태
-  const [showInputAndButtons, setShowInputAndButtons] = useState(true);
+  // 액션 버튼 그리드 표시 여부 상태
+  const [showActionButtons, setShowActionButtons] = useState(true);
   // 키보드 높이 상태
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   // 정산 모달 표시 여부
@@ -301,95 +301,78 @@ const ChatScreen = ({ navigation, route }) => {
             
             // 일반 메시지
             return (
-              <View key={msg.message_id} style={styles.messageBubble}>
-                <Text style={styles.messageSender}>{msg.sender_name || '나'}</Text>
-                <Text style={styles.messageText}>{msg.message}</Text>
-                <Text style={styles.messageTime}>{msg.time}</Text>
-              </View>
+            <View key={msg.message_id} style={styles.messageBubble}>
+              <Text style={styles.messageSender}>{msg.sender_name || '나'}</Text>
+              <Text style={styles.messageText}>{msg.message}</Text>
+              <Text style={styles.messageTime}>{msg.time}</Text>
+            </View>
             );
           })}
         </ScrollView>
 
-        {/* 채팅 입력 영역 및 액션 버튼 */}
-        {showInputAndButtons ? (
-          <>
-            {/* 채팅 입력 영역 */}
-            <View style={[
-              styles.inputContainer,
-              keyboardHeight > 0 && { marginBottom: Platform.OS === 'android' ? keyboardHeight - (Platform.OS === 'android' ? 0 : 0) : 0 }
-            ]}>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => {
-                  setShowInputAndButtons(false);
-                  Keyboard.dismiss();
-                }}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-              <TextInput
-                style={styles.inputField}
-                placeholder="(채팅을 입력하세요)"
-                value={message}
-                onChangeText={setMessage}
-                multiline
-              />
-              <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                <Text style={styles.sendButtonText}>전송</Text>
-              </TouchableOpacity>
-            </View>
+        {/* 채팅 입력 영역 */}
+        <View style={[
+          styles.inputContainer,
+          keyboardHeight > 0 && { marginBottom: Platform.OS === 'android' ? keyboardHeight - (Platform.OS === 'android' ? 0 : 0) : 0 }
+        ]}>
+          <TouchableOpacity 
+            style={styles.closeButton}
+            onPress={() => {
+              setShowActionButtons(!showActionButtons);
+            }}
+          >
+            <Text style={styles.closeButtonText}>{showActionButtons ? '✕' : '+'}</Text>
+          </TouchableOpacity>
+          <TextInput
+            style={styles.inputField}
+            placeholder="(채팅을 입력하세요)"
+            value={message}
+            onChangeText={setMessage}
+            multiline
+          />
+          <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+            <Text style={styles.sendButtonText}>전송</Text>
+          </TouchableOpacity>
+        </View>
 
-            {/* 액션 버튼 그리드 */}
-            <View style={styles.actionButtonsGrid}>
-              <TouchableOpacity style={styles.actionButton}>
-                <Text style={styles.actionButtonText}>토스 송금하기</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => setSettlementModalVisible(true)}
-              >
-                <Text style={styles.actionButtonText}>정산하기</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-                <Text style={styles.actionButtonText}>카카오페이 송금하기</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[
-                  styles.actionButton,
-                  !isHost && styles.actionButtonDisabled,
-                ]}
-                onPress={handleStartOperation}
-                disabled={!isHost}
-              >
-                <Text style={[
-                  styles.actionButtonText,
-                  !isHost && styles.actionButtonTextDisabled,
-                ]}>
-                  {isOperationStarted ? '운행 종료' : '운행 시작'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-                <Text style={styles.actionButtonText}>계좌 요청하기</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-                <Text style={styles.actionButtonText}>신고하기</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={handleLeaveRoom}>
-                <Text style={styles.actionButtonText}>채팅방 나가기</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          /* 숨김 상태일 때 + 버튼만 표시 */
-          <View style={styles.hiddenInputContainer}>
+        {/* 액션 버튼 그리드 */}
+        {showActionButtons && (
+          <View style={styles.actionButtonsGrid}>
+            <TouchableOpacity style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>토스 송금하기</Text>
+            </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.showButton}
-              onPress={() => {
-                setShowInputAndButtons(true);
-                Keyboard.dismiss();
-              }}
+              style={styles.actionButton}
+              onPress={() => setSettlementModalVisible(true)}
             >
-              <Text style={styles.showButtonText}>+</Text>
+              <Text style={styles.actionButtonText}>정산하기</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>카카오페이 송금하기</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[
+                styles.actionButton,
+                !isHost && styles.actionButtonDisabled,
+              ]}
+              onPress={handleStartOperation}
+              disabled={!isHost}
+            >
+              <Text style={[
+                styles.actionButtonText,
+                !isHost && styles.actionButtonTextDisabled,
+              ]}>
+                {isOperationStarted ? '운행 종료' : '운행 시작'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>계좌 요청하기</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>신고하기</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={handleLeaveRoom}>
+              <Text style={styles.actionButtonText}>채팅방 나가기</Text>
             </TouchableOpacity>
           </View>
         )}
