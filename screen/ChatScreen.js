@@ -10,8 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Keyboard,
   Image,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MemberCounter from '../components/MemberCounter';
@@ -40,38 +40,52 @@ const ChatScreen = ({ navigation, route }) => {
   const [messages, setMessages] = useState([]);
   // 액션 버튼 그리드 표시 여부 상태
   const [showActionButtons, setShowActionButtons] = useState(true);
-  // 키보드 높이 상태
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   // 정산 모달 표시 여부
   const [settlementModalVisible, setSettlementModalVisible] = useState(false);
   // 운행 시작 여부
-  const [isOperationStarted, setIsOperationStarted] = useState(false);
+  // 참여자로 입장한 경우(isFromCreate=false) 더미 데이터 테스트를 위해 초기값을 true로 설정
+  const [isOperationStarted, setIsOperationStarted] = useState(!isFromCreate);
+  // 운행 수락한 사용자 목록 (방장 제외)
+  const [acceptedUsers, setAcceptedUsers] = useState([]);
+  // 출발 메시지 표시 여부
+  const [isDeparted, setIsDeparted] = useState(false);
+  
+  // 참여자로 입장한 경우(isFromCreate=false) 더미 데이터 테스트를 위해 초기 메시지 추가
+  useEffect(() => {
+    if (!isFromCreate && messages.length === 0) {
+      const initialMessage = {
+        message_id: Date.now(),
+        room_id: roomData?.room_id,
+        sender_id: null,
+        sender_name: '시스템',
+        message: '운행 준비중입니다.',
+        created_at: new Date().toISOString(),
+        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        type: 'operation_start', // 운행 시작 메시지 타입
+      };
+      setMessages([initialMessage]);
+    }
+  }, [isFromCreate, roomData?.room_id]);
   
   // 현재 사용자가 방장인지 확인 (임시로 roomData의 host_id와 비교)
   // 실제로는 로그인한 사용자 ID와 비교해야 함
   const currentUserId = null; // TODO: 실제 사용자 ID로 교체
-  const isHost = roomData?.host_id === currentUserId || currentUserId === null; // 임시로 true
-
-  // 키보드 이벤트 리스너
-  useEffect(() => {
-    const keyboardWillShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardWillHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardWillShowListener.remove();
-      keyboardWillHideListener.remove();
-    };
-  }, []);
+  // 임시: currentUserId가 null이면 방장이 생성한 방(isFromCreate)인 경우에만 방장으로 인식
+  // 그 외의 경우(다른 사람이 생성한 방에 입장)는 참여자로 인식
+  const isHost = isFromCreate || (roomData?.host_id === currentUserId && currentUserId !== null);
+  
+  // 방장을 제외한 참여자 수 계산
+  const participantCount = Math.max(0, (roomData?.current_count || 1) - 1);
+  
+  // 현재 사용자의 고유 ID (임시로 생성, 실제로는 로그인한 사용자 ID 사용)
+  const [myUserId] = useState(() => {
+    // AsyncStorage나 서버에서 가져온 사용자 ID를 사용해야 함
+    // 임시로 로컬 스토리지 키 사용
+    return `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  });
+  
+  // 현재 사용자가 수락했는지 확인
+  const hasCurrentUserAccepted = acceptedUsers.includes(myUserId);
 
   // 메시지 전송 (API 명세서에 맞춘 구조)
   const handleSend = async () => {
@@ -120,6 +134,8 @@ const ChatScreen = ({ navigation, route }) => {
     if (isOperationStarted) {
       // 운행 종료
       setIsOperationStarted(false);
+      setAcceptedUsers([]);
+      setIsDeparted(false);
       const endMessage = {
         message_id: Date.now(),
         room_id: roomData?.room_id,
@@ -133,14 +149,17 @@ const ChatScreen = ({ navigation, route }) => {
     } else {
       // 운행 시작
       setIsOperationStarted(true);
+      setAcceptedUsers([]);
+      setIsDeparted(false);
       const startMessage = {
         message_id: Date.now(),
         room_id: roomData?.room_id,
         sender_id: null,
         sender_name: '시스템',
-        message: '운행이 시작되었습니다.',
+        message: '운행 준비중입니다.',
         created_at: new Date().toISOString(),
         time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        type: 'operation_start', // 운행 시작 메시지 타입
       };
       setMessages([...messages, startMessage]);
       
@@ -150,6 +169,72 @@ const ChatScreen = ({ navigation, route }) => {
       }
     }
   };
+
+  // 출발 수락 핸들러
+  const handleAcceptOperation = () => {
+    if (isHost) {
+      return; // 방장은 수락할 필요 없음
+    }
+    
+    // 이미 수락한 사용자인지 확인
+    if (hasCurrentUserAccepted) {
+      return;
+    }
+    
+    // 수락한 사용자 목록에 추가
+    const newAcceptedUsers = [...acceptedUsers, myUserId];
+    setAcceptedUsers(newAcceptedUsers);
+    
+    // 총 인원 수 계산 (방장 포함)
+    const totalMembers = roomData?.current_count || 1;
+    // 수락한 인원 수 = 참여자 중 수락한 수 + 방장(자동 수락) = newAcceptedUsers.length + 1
+    const acceptedCount = newAcceptedUsers.length + 1;
+    
+    // 수락 진행 상황 메시지 추가 (수락 X/4 형식)
+    const acceptMessage = {
+      message_id: Date.now(),
+      room_id: roomData?.room_id,
+      sender_id: null,
+      sender_name: '시스템',
+      message: `수락 ${acceptedCount}/${totalMembers}`,
+      created_at: new Date().toISOString(),
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages((prev) => [...prev, acceptMessage]);
+  };
+
+  // 모든 참여자가 수락했는지 확인하고 운행 시작 메시지 표시
+  useEffect(() => {
+    if (isOperationStarted && !isDeparted && participantCount > 0) {
+      if (acceptedUsers.length >= participantCount) {
+        setIsDeparted(true);
+        const totalMembers = roomData?.current_count || 1;
+        // 모든 참여자가 수락했을 때 최종 수락 메시지
+        const finalAcceptMessage = {
+          message_id: Date.now(),
+          room_id: roomData?.room_id,
+          sender_id: null,
+          sender_name: '시스템',
+          message: `수락 ${totalMembers}/${totalMembers}`,
+          created_at: new Date().toISOString(),
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, finalAcceptMessage]);
+        
+        // 운행 시작 메시지
+        const startMessage = {
+          message_id: Date.now() + 1,
+          room_id: roomData?.room_id,
+          sender_id: null,
+          sender_name: '시스템',
+          message: '운행이 시작되었습니다.',
+          created_at: new Date().toISOString(),
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, startMessage]);
+      }
+    }
+  }, [acceptedUsers.length, participantCount, isOperationStarted, isDeparted, roomData?.room_id, roomData?.current_count]);
 
   // 정산 전송 핸들러
   const handleSettlementSubmit = (settlementData) => {
@@ -201,41 +286,70 @@ const ChatScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
+      
+      {/* 헤더 */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerRoute}>{displayDestination}</Text>
+            <View style={styles.memberCounterContainer}>
+              <MemberCounter currentCount={currentCount} maxMembers={4} size={16} />
+            </View>
+        </View>
+        <View style={styles.headerInviteCode}>
+          <Text style={styles.inviteCodeTitle}>초대코드</Text>
+          <Text style={styles.inviteCodeText}>{displayInviteCode}</Text>
+        </View>
+      </View>
+
       <KeyboardAvoidingView
         style={styles.inner}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-        
-        {/* 헤더 */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerInfo}>
-            <Text style={styles.headerRoute}>{displayDestination}</Text>
-              <View style={styles.memberCounterContainer}>
-                <MemberCounter currentCount={currentCount} maxMembers={4} size={16} />
-              </View>
-          </View>
-          <View style={styles.headerInviteCode}>
-            <Text style={styles.inviteCodeTitle}>초대코드</Text>
-            <Text style={styles.inviteCodeText}>{displayInviteCode}</Text>
-          </View>
-        </View>
-
         {/* 채팅 메시지 영역 */}
-        <ScrollView style={styles.messagesContainer}>
+        <ScrollView 
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+        >
           {messages.length === 0 && (
             <View style={styles.emptyMessage}>
               <Text style={styles.emptyMessageText}>채팅을 시작해보세요!</Text>
             </View>
           )}
           {messages.map((msg) => {
+            // 운행 시작 메시지인 경우
+            if (msg.type === 'operation_start') {
+              // 디버깅: 버튼 표시 조건 확인
+              const shouldShowButton = !isHost && !hasCurrentUserAccepted && isOperationStarted;
+              
+              return (
+                <View key={msg.message_id} style={styles.operationStartMessageBubble}>
+                  <Text style={styles.operationStartMessageText}>{msg.message}</Text>
+                  {shouldShowButton && (
+                    <TouchableOpacity
+                      style={styles.acceptButton}
+                      onPress={handleAcceptOperation}
+                    >
+                      <Text style={styles.acceptButtonText}>출발 수락하기</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!isHost && hasCurrentUserAccepted && (
+                    <View style={styles.acceptedIndicator}>
+                      <Text style={styles.acceptedText}>✓ 수락 완료</Text>
+                    </View>
+                  )}
+                  <Text style={styles.messageTime}>{msg.time}</Text>
+                </View>
+              );
+            }
+            
             // 정산 메시지인 경우
             if (msg.type === 'settlement') {
               const individualCosts = msg.settlementData?.individualCosts || {};
@@ -255,8 +369,8 @@ const ChatScreen = ({ navigation, route }) => {
                     <TouchableOpacity 
                       style={styles.settlementActionButton}
                       onPress={() => {
-                        // 토스 송금하기
-                        Alert.alert('토스 송금하기', '토스 송금 기능을 실행합니다.');
+                        // 토스 송금
+                        Alert.alert('토스 송금', '토스 송금 기능을 실행합니다.');
                       }}
                     >
                       {tossLogo && (
@@ -266,13 +380,13 @@ const ChatScreen = ({ navigation, route }) => {
                           resizeMode="contain"
                         />
                       )}
-                      <Text style={styles.settlementActionButtonText}>토스 송금하기</Text>
+                      <Text style={styles.settlementActionButtonText}>토스 송금</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.settlementActionButton}
                       onPress={() => {
-                        // 카카오페이 송금하기
-                        Alert.alert('카카오페이 송금하기', '카카오페이 송금 기능을 실행합니다.');
+                        // 카카오페이 송금
+                        Alert.alert('카카오페이 송금', '카카오페이 송금 기능을 실행합니다.');
                       }}
                     >
                       {kakaoPayLogo && (
@@ -282,7 +396,7 @@ const ChatScreen = ({ navigation, route }) => {
                           resizeMode="contain"
                         />
                       )}
-                      <Text style={styles.settlementActionButtonText}>카카오페이 송금하기</Text>
+                      <Text style={styles.settlementActionButtonText}>카카오페이 송금</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.settlementActionButton}
@@ -311,13 +425,13 @@ const ChatScreen = ({ navigation, route }) => {
         </ScrollView>
 
         {/* 채팅 입력 영역 */}
-        <View style={[
-          styles.inputContainer,
-          keyboardHeight > 0 && { marginBottom: Platform.OS === 'android' ? keyboardHeight - (Platform.OS === 'android' ? 0 : 0) : 0 }
-        ]}>
+        <View style={styles.inputContainer}>
           <TouchableOpacity 
             style={styles.closeButton}
             onPress={() => {
+              // 키보드 닫기
+              Keyboard.dismiss();
+              // 액션 그리드 토글
               setShowActionButtons(!showActionButtons);
             }}
           >
@@ -329,6 +443,10 @@ const ChatScreen = ({ navigation, route }) => {
             value={message}
             onChangeText={setMessage}
             multiline
+            onFocus={() => {
+              // 채팅 입력 필드 포커스 시 액션 그리드 숨기기
+              setShowActionButtons(false);
+            }}
           />
           <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
             <Text style={styles.sendButtonText}>전송</Text>
@@ -338,17 +456,16 @@ const ChatScreen = ({ navigation, route }) => {
         {/* 액션 버튼 그리드 */}
         {showActionButtons && (
           <View style={styles.actionButtonsGrid}>
+            {/* 첫 번째 행: 토스 송금 | 운행 시작/종료 | 정산 */}
             <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>토스 송금하기</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => setSettlementModalVisible(true)}
-            >
-              <Text style={styles.actionButtonText}>정산하기</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>카카오페이 송금하기</Text>
+              {tossLogo && (
+                <Image 
+                  source={tossLogo} 
+                  style={styles.actionButtonImage}
+                  resizeMode="contain"
+                />
+              )}
+              <Text style={styles.actionButtonText}>토스 송금</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[
@@ -365,26 +482,48 @@ const ChatScreen = ({ navigation, route }) => {
                 {isOperationStarted ? '운행 종료' : '운행 시작'}
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => setSettlementModalVisible(true)}
+            >
+              <Text style={styles.actionButtonText}>정산</Text>
+            </TouchableOpacity>
+            
+            {/* 두 번째 행: 카카오페이 송금 | 빈 버튼 | 빈 버튼 */}
             <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>계좌 요청하기</Text>
+              {kakaoPayLogo && (
+                <Image 
+                  source={kakaoPayLogo} 
+                  style={styles.actionButtonImage}
+                  resizeMode="contain"
+                />
+              )}
+              <Text style={styles.actionButtonText}>카카오페이 송금</Text>
+            </TouchableOpacity>
+            <View style={styles.actionButtonEmpty} />
+            <View style={styles.actionButtonEmpty} />
+            
+            {/* 세 번째 행: 계좌 요청 | 신고 | 채팅방 나가기 */}
+            <TouchableOpacity style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>계좌 요청</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>신고하기</Text>
+              <Text style={styles.actionButtonText}>신고</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionButton} onPress={handleLeaveRoom}>
               <Text style={styles.actionButtonText}>채팅방 나가기</Text>
             </TouchableOpacity>
           </View>
         )}
-        
-        {/* 정산 모달 (정산하기 버튼에서) */}
-        <SettlementModal
-          visible={settlementModalVisible}
-          onClose={() => setSettlementModalVisible(false)}
-          roomData={roomData}
-          onSettlementSubmit={handleSettlementSubmit}
-        />
       </KeyboardAvoidingView>
+        
+      {/* 정산 모달 (정산하기 버튼에서) */}
+      <SettlementModal
+        visible={settlementModalVisible}
+        onClose={() => setSettlementModalVisible(false)}
+        roomData={roomData}
+        onSettlementSubmit={handleSettlementSubmit}
+      />
     </SafeAreaView>
   );
 };
@@ -475,6 +614,8 @@ const styles = StyleSheet.create({
   // 채팅 메시지 영역
   messagesContainer: {
     flex: 1,
+  },
+  messagesContent: {
     padding: 15,
   },
   emptyMessage: {
@@ -564,6 +705,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
+  // 운행 시작 메시지 스타일
+  operationStartMessageBubble: {
+    backgroundColor: '#E0E0E0',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    alignSelf: 'flex-end',
+    maxWidth: '80%',
+  },
+  operationStartMessageText: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  acceptButton: {
+    backgroundColor: '#4A90E2',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  acceptButtonText: {
+    fontSize: 14,
+    color: 'white',
+    fontWeight: '600',
+  },
+  acceptedIndicator: {
+    backgroundColor: '#E8F5E9',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  acceptedText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
   // 채팅 입력 영역
   inputContainer: {
     flexDirection: 'row',
@@ -642,16 +826,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     padding: 15,
-    gap: 10,
+    justifyContent: 'space-between',
   },
   actionButton: {
     width: '30%',
+    height: 70,
     backgroundColor: 'white',
-    paddingVertical: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    marginBottom: 10,
+  },
+  actionButtonEmpty: {
+    width: '30%',
+    height: 70,
+    backgroundColor: 'transparent',
+    marginBottom: 10,
+  },
+  actionButtonImage: {
+    width: 24,
+    height: 24,
+    marginBottom: 6,
   },
   actionButtonText: {
     fontSize: 12,

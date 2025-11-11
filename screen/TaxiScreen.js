@@ -37,8 +37,8 @@ const TaxiScreen = ({ navigation }) => {
       departure: '기흥3번출',
       destination: '샬롬관',
       current_count: 2,
-      max_members: 4,
-      host_id: null,
+      max_members: 2, // current_count와 동일하게 설정
+      host_id: 'host_user_001', // 테스트용 방장 ID
       invite_code_enabled: true, // 초대코드 on
       invite_code: '123456', // 초대코드
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
@@ -129,7 +129,7 @@ const TaxiScreen = ({ navigation }) => {
         const updated = { ...prev };
         delete updated[roomData.room_id];
         return updated;
-      });
+    });
     }
     // 참여중인 채팅방 목록에 추가하지 않음 (운행 시작 시에만 추가)
     // 채팅방으로 이동
@@ -196,29 +196,31 @@ const TaxiScreen = ({ navigation }) => {
               const currentCount = room.current_count || 0;
               const maxMembers = 4; // 항상 4명으로 고정
               return (
-                <View key={room.room_id} style={styles.roomItem}>
+              <View key={room.room_id} style={styles.roomItem}>
                   <View style={styles.roomNumberWithLock}>
                     <Text style={styles.roomNumberText}>{room.room_id}</Text>
                     {room.invite_code_enabled && (
-                      <LockIcon size={18} />
+                      <View style={{ marginLeft: 6 }}>
+                        <LockIcon size={18} />
+                      </View>
                     )}
                   </View>
-                  <View style={styles.destinationContainer}>
-                    <Text style={styles.destinationText}>{room.departure || '출발지'}</Text>
-                    <Text style={styles.destinationArrow}>→</Text>
-                    <Text style={styles.destinationText}>{room.destination || '도착지'}</Text>
-                  </View>
-                  <Text style={styles.roomItemText}>{room.time || ''}</Text>
+                <View style={styles.destinationContainer}>
+                  <Text style={styles.destinationText}>{room.departure || '출발지'}</Text>
+                  <Text style={styles.destinationArrow}>→</Text>
+                  <Text style={styles.destinationText}>{room.destination || '도착지'}</Text>
+                </View>
+                <Text style={styles.roomItemText}>{room.time || ''}</Text>
                   <View style={styles.memberCounterWrapper}>
                     <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
                   </View>
-                  <TouchableOpacity 
-                    style={styles.enterButton}
-                    onPress={() => handleEnterRoom(room)}
-                  >
-                    <Text style={styles.enterButtonText}>입장</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity 
+                  style={styles.enterButton}
+                  onPress={() => handleEnterRoom(room)}
+                >
+                  <Text style={styles.enterButtonText}>입장</Text>
+                </TouchableOpacity>
+              </View>
               );
             })}
           </View>
@@ -432,7 +434,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 50,
     marginRight: 10,
-    gap: 6,
   },
   roomNumberText: {
     fontSize: 14,
@@ -512,7 +513,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 50,
     marginRight: 10,
-    gap: 6,
   },
   roomListNumber: {
     fontSize: 14,

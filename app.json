@@ -1,4 +1,23 @@
 {
-  "name": "KProjectFrontend",
-  "displayName": "KProjectFrontend"
+  "expo": {
+    "name": "kprojectI2",
+    "slug": "kprojectI2",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true
+    }
+  }
 }

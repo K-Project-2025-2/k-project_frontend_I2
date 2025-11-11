@@ -567,7 +567,6 @@ const styles = StyleSheet.create({
   locationGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
     marginBottom: 20,
   },
   locationButton: {
@@ -577,6 +576,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 8,
+    marginBottom: 8,
   },
   locationButtonText: {
     fontSize: 14,
@@ -595,13 +596,13 @@ const styles = StyleSheet.create({
   },
   settingOptions: {
     flexDirection: 'row',
-    gap: 10,
   },
   settingOption: {
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 6,
     backgroundColor: '#E0E0E0',
+    marginRight: 10,
   },
   settingOptionActive: {
     backgroundColor: '#4A90E2',

@@ -1,12 +1,8 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { enableScreens } from 'react-native-screens';
 import TaxiScreen from './screen/TaxiScreen';
 import ChatScreen from './screen/ChatScreen';
-
-// react-native-screens 초기화
-enableScreens();
 
 // Stack Navigator 생성
 const Stack = createStackNavigator();
