@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,14 @@ import {
   Alert,
   Image,
   Keyboard,
+  Linking,
+  AppState,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MemberCounter from '../components/MemberCounter';
 import SettlementModal from '../modal/SettlementModal';
+import { sendMessage, getMessages } from '../services/taxiApi';
 
 // 이미지 경로 (이미지 파일을 assets/images 폴더에 추가하세요)
 // 이미지 파일이 없을 경우를 대비해 try-catch 사용
@@ -42,30 +46,178 @@ const ChatScreen = ({ navigation, route }) => {
   const [showActionButtons, setShowActionButtons] = useState(true);
   // 정산 모달 표시 여부
   const [settlementModalVisible, setSettlementModalVisible] = useState(false);
-  // 운행 시작 여부
-  // 참여자로 입장한 경우(isFromCreate=false) 더미 데이터 테스트를 위해 초기값을 true로 설정
-  const [isOperationStarted, setIsOperationStarted] = useState(!isFromCreate);
+  // 운행 시작 여부 (방장이 운행시작 버튼을 눌렀는지 여부)
+  // 초기값은 false로 설정 (방장이 운행시작을 누르기 전까지는 false)
+  const [isOperationStarted, setIsOperationStarted] = useState(false);
   // 운행 수락한 사용자 목록 (방장 제외)
   const [acceptedUsers, setAcceptedUsers] = useState([]);
   // 출발 메시지 표시 여부
   const [isDeparted, setIsDeparted] = useState(false);
-  
-  // 참여자로 입장한 경우(isFromCreate=false) 더미 데이터 테스트를 위해 초기 메시지 추가
+  // 송금 완료한 사용자 목록 (사용자 ID 기반)
+  const [paidUsers, setPaidUsers] = useState([]);
+  // 앱 상태 추적 (외부 앱에서 돌아왔는지 확인)
+  const appState = useRef(AppState.currentState);
+  const [pendingPayment, setPendingPayment] = useState(null); // 대기 중인 송금 정보
+  // TextInput ref
+  const textInputRef = useRef(null);
+  // 메시지 ref (Polling에서 최신 메시지 참조용)
+  const messagesRef = useRef(messages);
   useEffect(() => {
-    if (!isFromCreate && messages.length === 0) {
-      const initialMessage = {
-        message_id: Date.now(),
-        room_id: roomData?.room_id,
-        sender_id: null,
-        sender_name: '시스템',
-        message: '운행 준비중입니다.',
-        created_at: new Date().toISOString(),
-        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-        type: 'operation_start', // 운행 시작 메시지 타입
-      };
-      setMessages([initialMessage]);
-    }
-  }, [isFromCreate, roomData?.room_id]);
+    messagesRef.current = messages;
+  }, [messages]);
+  
+  // 입장 메시지 표시 여부 추적 (한 번만 표시)
+  const hasShownJoinMessage = useRef(false);
+  
+  // 채팅방 입장 시 입장 메시지 추가 및 이미 수락한 인원 수 초기화 (한 번만)
+  useEffect(() => {
+    if (!roomData?.room_id || hasShownJoinMessage.current) return;
+    
+    // 사용자 이름 (임시로 더미 데이터 사용, 나중에 실제 사용자 이름으로 교체)
+    const userName = '홍길동'; // TODO: 실제 사용자 이름으로 교체
+    
+    const joinMessage = {
+      message_id: Date.now() - 1, // 다른 메시지보다 먼저 표시되도록
+      room_id: roomData.room_id,
+      sender_id: null,
+      sender_name: '시스템',
+      message: `${userName}님이 입장했습니다.`,
+      created_at: new Date().toISOString(),
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      type: 'user_joined',
+    };
+    
+    // 수락 상태는 운행 시작 후 실제 참여자 기반으로 관리됨
+    // 입장 시에는 수락 상태 초기화하지 않음
+    
+    setMessages(prev => [joinMessage, ...prev]);
+    
+    hasShownJoinMessage.current = true;
+  }, [roomData?.room_id, roomData?.current_count, isFromCreate]);
+  
+  // 채팅방 입장 시 메시지 조회 및 Polling 설정
+  useEffect(() => {
+    if (!roomData?.room_id) return;
+
+    // 초기 메시지 로드 (더미 데이터 모드)
+    const loadMessages = async () => {
+      // API 호출 비활성화 - 더미 데이터로만 진행
+      // 운행 준비중 메시지는 방장이 운행시작 버튼을 눌렀을 때만 표시됨
+      // (handleStartOperation에서 처리)
+      
+      // API 호출 주석 처리 (나중에 활성화)
+      // try {
+      //   const fetchedMessages = await getMessages(roomData.room_id);
+      //   const formattedMessages = fetchedMessages.map(msg => ({
+      //     ...msg,
+      //     time: new Date(msg.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      //   }));
+      //   setMessages(formattedMessages);
+      // } catch (error) {
+      //   console.log('메시지 조회 실패:', error.message);
+      // }
+    };
+
+    loadMessages();
+
+    // Polling 비활성화 (더미 데이터 모드)
+    // API 호출 주석 처리 (나중에 활성화)
+    // const pollingInterval = setInterval(async () => {
+    //   try {
+    //     const currentMessages = messagesRef.current;
+    //     const lastMessageId = currentMessages.length > 0 ? currentMessages[currentMessages.length - 1].message_id : null;
+    //     const newMessages = await getMessages(roomData.room_id, lastMessageId);
+    //     if (newMessages && newMessages.length > 0) {
+    //       const formattedMessages = newMessages.map(msg => ({
+    //         ...msg,
+    //         time: new Date(msg.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    //       }));
+    //       setMessages(prev => {
+    //         const existingIds = new Set(prev.map(m => m.message_id));
+    //         const uniqueNewMessages = formattedMessages.filter(m => !existingIds.has(m.message_id));
+    //         return [...prev, ...uniqueNewMessages];
+    //       });
+    //     }
+    //   } catch (error) {
+    //     console.log('메시지 Polling 실패:', error.message);
+    //   }
+    // }, 3000);
+    
+    // 더미 데이터 모드에서는 Polling 없음
+    const pollingInterval = null;
+
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [roomData?.room_id, isFromCreate]);
+
+  // 송금 완료 처리 (useCallback으로 메모이제이션)
+  const handlePaymentComplete = useCallback((paymentMethod) => {
+    if (!myUserId) return; // myUserId가 없으면 처리하지 않음
+    
+    // 이미 송금 완료한 사용자인지 확인
+    setPaidUsers(prevPaidUsers => {
+      if (prevPaidUsers.includes(myUserId)) {
+        return prevPaidUsers; // 이미 송금 완료했으면 중복 처리 방지
+      }
+
+      // 현재 사용자를 송금 완료 목록에 추가
+      const newPaidUsers = [...prevPaidUsers, myUserId];
+      
+      // 정산 메시지 찾기 및 송금 완료 메시지 추가
+      setMessages(prevMessages => {
+        const settlementMessage = prevMessages.find(msg => msg.type === 'settlement');
+        let totalMembers = 0;
+        let completedCount = newPaidUsers.length;
+        
+        if (settlementMessage && settlementMessage.settlementData) {
+          const individualCosts = settlementMessage.settlementData.individualCosts || {};
+          totalMembers = Object.keys(individualCosts).length;
+        }
+        
+        // 송금 완료 메시지 추가 (완료 인원 수 포함)
+        const paymentMessage = {
+          message_id: Date.now(),
+          room_id: roomData?.room_id,
+          sender_id: null,
+          sender_name: '시스템',
+          message: totalMembers > 0 
+            ? `송금이 완료되었습니다. (${completedCount}/${totalMembers})`
+            : '송금이 완료되었습니다.',
+          created_at: new Date().toISOString(),
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+          type: 'payment_complete',
+        };
+        
+        return [...prevMessages, paymentMessage];
+      });
+      
+      return newPaidUsers;
+    });
+  }, [myUserId, roomData?.room_id]);
+
+  // 앱 상태 변경 감지 (외부 앱에서 돌아왔을 때 송금 완료 확인)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      // 앱이 백그라운드에서 포그라운드로 돌아왔을 때
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active' &&
+        pendingPayment
+      ) {
+        // 외부 앱에서 돌아왔고, 대기 중인 송금이 있으면 송금 완료 처리
+        handlePaymentComplete(pendingPayment);
+        setPendingPayment(null);
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [pendingPayment, handlePaymentComplete]);
   
   // 현재 사용자가 방장인지 확인 (임시로 roomData의 host_id와 비교)
   // 실제로는 로그인한 사용자 ID와 비교해야 함
@@ -77,41 +229,121 @@ const ChatScreen = ({ navigation, route }) => {
   // 방장을 제외한 참여자 수 계산
   const participantCount = Math.max(0, (roomData?.current_count || 1) - 1);
   
-  // 현재 사용자의 고유 ID (임시로 생성, 실제로는 로그인한 사용자 ID 사용)
-  const [myUserId] = useState(() => {
-    // AsyncStorage나 서버에서 가져온 사용자 ID를 사용해야 함
-    // 임시로 로컬 스토리지 키 사용
-    return `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  });
+  // 현재 사용자의 고유 ID (AsyncStorage에서 가져오거나 생성)
+  const [myUserId, setMyUserId] = useState(null);
   
+  // 사용자 ID 초기화 (영구 저장)
+  useEffect(() => {
+    const initUserId = async () => {
+      try {
+        let userId = await AsyncStorage.getItem('myUserId');
+        if (!userId) {
+          userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          await AsyncStorage.setItem('myUserId', userId);
+        }
+        setMyUserId(userId);
+      } catch (error) {
+        // AsyncStorage 실패 시 임시 ID 생성
+        const tempUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        setMyUserId(tempUserId);
+      }
+    };
+    initUserId();
+  }, []);
+  
+  // 방별 수락 상태 저장 키 (useCallback으로 메모이제이션)
+  const getAcceptedKey = useCallback((roomId) => {
+    if (!roomId) return null;
+    return `accepted_${roomId}`;
+  }, []);
+  
+  // 방 입장 시 이전 수락 상태 복원 (운행 시작된 상태에서만)
+  useEffect(() => {
+    if (!roomData?.room_id || !myUserId || !isOperationStarted) return;
+    
+    const restoreAcceptedState = async () => {
+      try {
+        const acceptedKey = getAcceptedKey(roomData.room_id);
+        if (!acceptedKey) return;
+        
+        const acceptedUserIds = await AsyncStorage.getItem(acceptedKey);
+        if (acceptedUserIds) {
+          const parsed = JSON.parse(acceptedUserIds);
+          // 현재 사용자가 수락한 경우 acceptedUsers에 추가
+          if (Array.isArray(parsed) && parsed.includes(myUserId)) {
+            setAcceptedUsers(prev => {
+              if (!prev.includes(myUserId)) {
+                return [...prev, myUserId];
+              }
+              return prev;
+            });
+          }
+        }
+      } catch (error) {
+        console.log('수락 상태 복원 실패:', error);
+      }
+    };
+    
+    restoreAcceptedState();
+  }, [roomData?.room_id, myUserId, isOperationStarted, getAcceptedKey]);
+
+  // 참여자 수 변경 시 수락 상태 동기화
+  // current_count가 변경되면 (사용자가 나갔을 때) 수락 상태도 업데이트
+  useEffect(() => {
+    if (!isOperationStarted || !roomData?.room_id) return;
+    
+    const totalMembers = roomData?.max_members || roomData?.current_count || 1;
+    const currentAcceptedCount = acceptedUsers.length + 1; // 방장 포함
+    
+    // 현재 참여자 수보다 수락한 인원이 많으면 조정
+    // (사용자가 나갔을 때 해당 사용자의 수락 상태 제거)
+    if (currentAcceptedCount > totalMembers) {
+      // 참여자 수에 맞게 수락 상태 조정
+      // 실제로는 서버에서 받은 수락 상태를 사용해야 하지만,
+      // 더미 데이터 모드에서는 참여자 수에 맞게 조정
+      const adjustedAcceptedUsers = acceptedUsers.slice(0, Math.max(0, totalMembers - 1));
+      setAcceptedUsers(adjustedAcceptedUsers);
+    }
+  }, [roomData?.current_count, roomData?.max_members, isOperationStarted, roomData?.room_id, acceptedUsers.length]);
+
   // 현재 사용자가 수락했는지 확인
-  const hasCurrentUserAccepted = acceptedUsers.includes(myUserId);
+  const hasCurrentUserAccepted = myUserId ? acceptedUsers.includes(myUserId) : false;
 
   // 메시지 전송 (API 명세서에 맞춘 구조)
   const handleSend = async () => {
     if (!message.trim()) return;
 
-    // 실제로는 sendMessage API를 호출해야 함
-    // POST /taxi/rooms/{roomId}/messages
-    const newMessage = {
-      message_id: Date.now(), // API: message_id (number)
-      room_id: roomData?.room_id, // API: room_id
-      sender_id: null, // API: sender_id (서버에서 받아올 값)
-      sender_name: '나', // API: sender_name (서버에서 받아올 값)
-      message: message.trim(), // API: message
-      created_at: new Date().toISOString(), // API: created_at (ISO 8601)
-      // UI 표시용
+    const messageText = message.trim();
+    setMessage(''); // 입력 필드 먼저 비우기
+
+    // 로컬에 즉시 표시 (낙관적 업데이트)
+    const tempMessage = {
+      message_id: Date.now(), // 임시 ID
+      room_id: roomData?.room_id,
+      sender_id: null,
+      sender_name: '나',
+      message: messageText,
+      created_at: new Date().toISOString(),
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     };
+    setMessages(prev => [...prev, tempMessage]);
 
-    setMessages([...messages, newMessage]);
-    setMessage('');
+    // API 호출 비활성화 - 더미 데이터로만 진행
+    // 메시지는 이미 로컬에 추가되었으므로 그대로 유지
     
-    // TODO: 실제 API 호출
+    // API 호출 주석 처리 (나중에 활성화)
     // try {
-    //   await sendMessage(roomData.room_id, message.trim());
+    //   const response = await sendMessage(roomData.room_id, messageText);
+    //   const serverMessage = {
+    //     ...response,
+    //     time: new Date(response.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    //   };
+    //   setMessages(prev => {
+    //     const filtered = prev.filter(msg => msg.message_id !== tempMessage.message_id);
+    //     return [...filtered, serverMessage];
+    //   });
     // } catch (error) {
-    //   alert('메시지 전송 실패');
+    //   console.log('메시지 전송 실패:', error.message);
     // }
   };
 
@@ -120,12 +352,12 @@ const ChatScreen = ({ navigation, route }) => {
     ? `${roomData.departure} → ${roomData.destination}`
     : '기흥역 → 이공관';
   const currentCount = roomData?.current_count || 1;
-  const maxMembers = 4; // 항상 4명으로 고정
+  const maxMembers = roomData?.max_members || 4; // 방 생성 시 설정한 인원수 사용
   const inviteCodeEnabled = roomData?.invite_code_enabled;
   const displayInviteCode = inviteCodeEnabled === false ? 'OFF' : (roomData?.invite_code || 'OFF');
   
   // 운행 시작 핸들러
-  const handleStartOperation = () => {
+  const handleStartOperation = async () => {
     if (!isHost) {
       Alert.alert('알림', '방장만 운행을 시작할 수 있습니다.');
       return;
@@ -149,8 +381,20 @@ const ChatScreen = ({ navigation, route }) => {
     } else {
       // 운행 시작
       setIsOperationStarted(true);
+      // 운행 시작 시 수락 상태 초기화 (현재 참여자 수 기반으로 관리)
       setAcceptedUsers([]);
       setIsDeparted(false);
+      
+      // AsyncStorage에서 수락 상태 초기화
+      try {
+        const acceptedKey = getAcceptedKey(roomData?.room_id);
+        if (acceptedKey) {
+          await AsyncStorage.removeItem(acceptedKey);
+        }
+      } catch (error) {
+        console.log('수락 상태 초기화 실패:', error);
+      }
+      
       const startMessage = {
         message_id: Date.now(),
         room_id: roomData?.room_id,
@@ -171,8 +415,8 @@ const ChatScreen = ({ navigation, route }) => {
   };
 
   // 출발 수락 핸들러
-  const handleAcceptOperation = () => {
-    if (isHost) {
+  const handleAcceptOperation = async () => {
+    if (isHost || !myUserId) {
       return; // 방장은 수락할 필요 없음
     }
     
@@ -185,22 +429,42 @@ const ChatScreen = ({ navigation, route }) => {
     const newAcceptedUsers = [...acceptedUsers, myUserId];
     setAcceptedUsers(newAcceptedUsers);
     
-    // 총 인원 수 계산 (방장 포함)
-    const totalMembers = roomData?.current_count || 1;
+    // AsyncStorage에 수락 상태 저장
+    try {
+      const acceptedKey = getAcceptedKey(roomData?.room_id);
+      if (acceptedKey) {
+        await AsyncStorage.setItem(acceptedKey, JSON.stringify(newAcceptedUsers));
+      }
+    } catch (error) {
+      console.log('수락 상태 저장 실패:', error);
+    }
+    
+    // 총 인원 수 계산 (max_members 사용)
+    const totalMembers = roomData?.max_members || roomData?.current_count || 1;
     // 수락한 인원 수 = 참여자 중 수락한 수 + 방장(자동 수락) = newAcceptedUsers.length + 1
     const acceptedCount = newAcceptedUsers.length + 1;
     
-    // 수락 진행 상황 메시지 추가 (수락 X/4 형식)
-    const acceptMessage = {
-      message_id: Date.now(),
-      room_id: roomData?.room_id,
-      sender_id: null,
-      sender_name: '시스템',
-      message: `수락 ${acceptedCount}/${totalMembers}`,
-      created_at: new Date().toISOString(),
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessages((prev) => [...prev, acceptMessage]);
+    // 수락 진행 상황 메시지는 제거 (게이지 바로만 표시)
+    
+    // 모든 인원이 수락했는지 확인
+    const isAllAccepted = acceptedCount >= totalMembers;
+    
+    // 모든 인원이 수락했으면 운행 시작 메시지 표시
+    if (isAllAccepted) {
+      setIsDeparted(true);
+      setTimeout(() => {
+        const startMessage = {
+          message_id: Date.now() + 1,
+          room_id: roomData?.room_id,
+          sender_id: null,
+          sender_name: '시스템',
+          message: '운행이 시작되었습니다.',
+          created_at: new Date().toISOString(),
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, startMessage]);
+      }, 300);
+    }
   };
 
   // 모든 참여자가 수락했는지 확인하고 운행 시작 메시지 표시
@@ -208,18 +472,7 @@ const ChatScreen = ({ navigation, route }) => {
     if (isOperationStarted && !isDeparted && participantCount > 0) {
       if (acceptedUsers.length >= participantCount) {
         setIsDeparted(true);
-        const totalMembers = roomData?.current_count || 1;
-        // 모든 참여자가 수락했을 때 최종 수락 메시지
-        const finalAcceptMessage = {
-          message_id: Date.now(),
-          room_id: roomData?.room_id,
-          sender_id: null,
-          sender_name: '시스템',
-          message: `수락 ${totalMembers}/${totalMembers}`,
-          created_at: new Date().toISOString(),
-          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-        };
-        setMessages((prev) => [...prev, finalAcceptMessage]);
+        // 수락 진행 상황 메시지는 제거 (게이지 바로만 표시)
         
         // 운행 시작 메시지
         const startMessage = {
@@ -258,12 +511,85 @@ const ChatScreen = ({ navigation, route }) => {
     };
     
     setMessages([...messages, settlementMessage]);
+    // 정산 메시지가 생성되면 송금 완료 목록 초기화
+    setPaidUsers([]);
+  };
+
+  // 토스 앱 열기
+  const openTossApp = async () => {
+    try {
+      const tossUrl = 'toss://';
+      const canOpen = await Linking.canOpenURL(tossUrl);
+      
+      if (canOpen) {
+        setPendingPayment('토스');
+        await Linking.openURL(tossUrl);
+      } else {
+        // 토스 앱이 설치되지 않은 경우
+        Alert.alert('알림', '토스 앱이 설치되어 있지 않습니다.');
+      }
+    } catch (error) {
+      console.error('토스 앱 열기 실패:', error);
+      Alert.alert('오류', '토스 앱을 열 수 없습니다.');
+    }
+  };
+
+  // 카카오페이 앱 열기
+  const openKakaoPayApp = async () => {
+    try {
+      // 카카오페이 앱 URL (kakaotalk:// 또는 kakaopay://)
+      const kakaoPayUrl = 'kakaotalk://';
+      const canOpen = await Linking.canOpenURL(kakaoPayUrl);
+      
+      if (canOpen) {
+        setPendingPayment('카카오페이');
+        await Linking.openURL(kakaoPayUrl);
+      } else {
+        // 카카오톡/카카오페이 앱이 설치되지 않은 경우
+        Alert.alert('알림', '카카오톡 또는 카카오페이 앱이 설치되어 있지 않습니다.');
+      }
+    } catch (error) {
+      console.error('카카오페이 앱 열기 실패:', error);
+      Alert.alert('오류', '카카오페이 앱을 열 수 없습니다.');
+    }
+  };
+
+
+  // 모든 참여자가 송금을 완료했는지 확인
+  const checkAllPaymentsComplete = () => {
+    // 정산 메시지 찾기
+    const settlementMessage = messages.find(msg => msg.type === 'settlement');
+    if (!settlementMessage || !settlementMessage.settlementData) {
+      return true; // 정산 메시지가 없으면 나가기 허용
+    }
+    
+    const individualCosts = settlementMessage.settlementData.individualCosts || {};
+    const allMembers = Object.keys(individualCosts);
+    const totalMembers = allMembers.length;
+    
+    // 송금 완료 메시지 개수 확인 (각 참여자가 송금하면 payment_complete 메시지가 생성됨)
+    const paymentCompleteMessages = messages.filter(msg => msg.type === 'payment_complete');
+    const completedPayments = paymentCompleteMessages.length;
+    
+    // 모든 참여자가 송금을 완료했는지 확인
+    return completedPayments >= totalMembers;
   };
 
   // 채팅방 나가기
   const handleLeaveRoom = () => {
     if (!roomData) {
       navigation.goBack();
+      return;
+    }
+
+    // 정산 메시지가 있고 모든 참여자가 송금을 완료하지 않았다면 나가기 막기
+    const settlementMessage = messages.find(msg => msg.type === 'settlement');
+    if (settlementMessage && !checkAllPaymentsComplete()) {
+      Alert.alert(
+        '알림',
+        '모든 참여자의 송금이 완료되어야 채팅방을 나갈 수 있습니다.',
+        [{ text: '확인', style: 'default' }]
+      );
       return;
     }
 
@@ -286,32 +612,33 @@ const ChatScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      
-      {/* 헤더 */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerRoute}>{displayDestination}</Text>
+        <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
+        
+        {/* 헤더 */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerRoute}>{displayDestination}</Text>
             <View style={styles.memberCounterContainer}>
-              <MemberCounter currentCount={currentCount} maxMembers={4} size={16} />
+              <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={16} />
             </View>
+          </View>
+          <View style={styles.headerInviteCode}>
+            <Text style={styles.inviteCodeTitle}>초대코드</Text>
+            <Text style={styles.inviteCodeText}>{displayInviteCode}</Text>
+          </View>
         </View>
-        <View style={styles.headerInviteCode}>
-          <Text style={styles.inviteCodeTitle}>초대코드</Text>
-          <Text style={styles.inviteCodeText}>{displayInviteCode}</Text>
-        </View>
-      </View>
 
       <KeyboardAvoidingView
         style={styles.inner}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        enabled={!showActionButtons}
       >
         {/* 채팅 메시지 영역 */}
         <ScrollView 
@@ -324,14 +651,50 @@ const ChatScreen = ({ navigation, route }) => {
             </View>
           )}
           {messages.map((msg) => {
+            // 입장 메시지인 경우 (가운데 정렬)
+            if (msg.type === 'user_joined') {
+              return (
+                <View key={msg.message_id} style={styles.joinMessageBubble}>
+                  <Text style={styles.joinMessageText}>{msg.message}</Text>
+                </View>
+              );
+            }
+            
             // 운행 시작 메시지인 경우
             if (msg.type === 'operation_start') {
               // 디버깅: 버튼 표시 조건 확인
               const shouldShowButton = !isHost && !hasCurrentUserAccepted && isOperationStarted;
               
+              // 게이지 계산: 수락한 인원 수 / 전체 인원 수
+              // 현재 참여자 수(current_count)를 기준으로 계산
+              // 사용자가 나가면 current_count가 감소하고, 게이지도 자동으로 반영됨
+              const totalMembers = roomData?.current_count || roomData?.max_members || 1;
+              // acceptedUsers에는 이미 수락한 참여자들이 포함되어 있음
+              // 방장은 자동으로 수락한 것으로 간주하므로 +1
+              const acceptedCount = acceptedUsers.length + 1; // 방장 포함
+              const progress = Math.min(acceptedCount / totalMembers, 1); // 0 ~ 1 (최대 1로 제한)
+              const isAllAccepted = acceptedCount >= totalMembers;
+              
               return (
                 <View key={msg.message_id} style={styles.operationStartMessageBubble}>
                   <Text style={styles.operationStartMessageText}>{msg.message}</Text>
+                  
+                  {/* 게이지 바 */}
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBarBackground}>
+                      <View 
+                        style={[
+                          styles.progressBarFill,
+                          { width: `${progress * 100}%` },
+                          isAllAccepted && styles.progressBarFillComplete
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {isAllAccepted ? '수락 완료' : `${acceptedCount}/${totalMembers}`}
+                    </Text>
+                  </View>
+                  
                   {shouldShowButton && (
                     <TouchableOpacity
                       style={styles.acceptButton}
@@ -368,10 +731,7 @@ const ChatScreen = ({ navigation, route }) => {
                   <View style={styles.settlementActionButtons}>
                     <TouchableOpacity 
                       style={styles.settlementActionButton}
-                      onPress={() => {
-                        // 토스 송금
-                        Alert.alert('토스 송금', '토스 송금 기능을 실행합니다.');
-                      }}
+                      onPress={openTossApp}
                     >
                       {tossLogo && (
                         <Image 
@@ -384,10 +744,7 @@ const ChatScreen = ({ navigation, route }) => {
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.settlementActionButton}
-                      onPress={() => {
-                        // 카카오페이 송금
-                        Alert.alert('카카오페이 송금', '카카오페이 송금 기능을 실행합니다.');
-                      }}
+                      onPress={openKakaoPayApp}
                     >
                       {kakaoPayLogo && (
                         <Image 
@@ -424,40 +781,60 @@ const ChatScreen = ({ navigation, route }) => {
           })}
         </ScrollView>
 
-        {/* 채팅 입력 영역 */}
+            {/* 채팅 입력 영역 */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity 
-            style={styles.closeButton}
-            onPress={() => {
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => {
               // 키보드 닫기
-              Keyboard.dismiss();
+                  Keyboard.dismiss();
               // 액션 그리드 토글
               setShowActionButtons(!showActionButtons);
-            }}
-          >
+                }}
+              >
             <Text style={styles.closeButtonText}>{showActionButtons ? '✕' : '+'}</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={styles.inputField}
-            placeholder="(채팅을 입력하세요)"
-            value={message}
-            onChangeText={setMessage}
-            multiline
+              </TouchableOpacity>
+              <TextInput
+            ref={textInputRef}
+                style={styles.inputField}
+                placeholder="(채팅을 입력하세요)"
+                value={message}
+                onChangeText={setMessage}
+                multiline
+            editable={true}
+            autoFocus={false}
             onFocus={() => {
               // 채팅 입력 필드 포커스 시 액션 그리드 숨기기
               setShowActionButtons(false);
             }}
-          />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-            <Text style={styles.sendButtonText}>전송</Text>
-          </TouchableOpacity>
-        </View>
+            onPressIn={() => {
+              // 터치 시 확실히 포커스 받기
+              setShowActionButtons(false);
+              // 포커스 강제
+              if (textInputRef.current) {
+                textInputRef.current.focus();
+              }
+            }}
+            onTouchStart={() => {
+              // 터치 시작 시 포커스
+              if (textInputRef.current) {
+                textInputRef.current.focus();
+              }
+            }}
+              />
+              <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                <Text style={styles.sendButtonText}>전송</Text>
+              </TouchableOpacity>
+            </View>
 
-        {/* 액션 버튼 그리드 */}
+            {/* 액션 버튼 그리드 */}
         {showActionButtons && (
-          <View style={styles.actionButtonsGrid}>
+            <View style={styles.actionButtonsGrid}>
             {/* 첫 번째 행: 토스 송금 | 운행 시작/종료 | 정산 */}
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={openTossApp}
+            >
               {tossLogo && (
                 <Image 
                   source={tossLogo} 
@@ -466,7 +843,7 @@ const ChatScreen = ({ navigation, route }) => {
                 />
               )}
               <Text style={styles.actionButtonText}>토스 송금</Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
             <TouchableOpacity 
               style={[
                 styles.actionButton,
@@ -481,16 +858,19 @@ const ChatScreen = ({ navigation, route }) => {
               ]}>
                 {isOperationStarted ? '운행 종료' : '운행 시작'}
               </Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => setSettlementModalVisible(true)}
             >
               <Text style={styles.actionButtonText}>정산</Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
             
             {/* 두 번째 행: 카카오페이 송금 | 빈 버튼 | 빈 버튼 */}
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={openKakaoPayApp}
+            >
               {kakaoPayLogo && (
                 <Image 
                   source={kakaoPayLogo} 
@@ -499,19 +879,19 @@ const ChatScreen = ({ navigation, route }) => {
                 />
               )}
               <Text style={styles.actionButtonText}>카카오페이 송금</Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
             <View style={styles.actionButtonEmpty} />
             <View style={styles.actionButtonEmpty} />
             
             {/* 세 번째 행: 계좌 요청 | 신고 | 채팅방 나가기 */}
-            <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity style={styles.actionButton}>
               <Text style={styles.actionButtonText}>계좌 요청</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton}>
               <Text style={styles.actionButtonText}>신고</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton} onPress={handleLeaveRoom}>
-              <Text style={styles.actionButtonText}>채팅방 나가기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={handleLeaveRoom}>
+                <Text style={styles.actionButtonText}>채팅방 나가기</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -652,6 +1032,18 @@ const styles = StyleSheet.create({
     color: '#666',
     alignSelf: 'flex-end',
   },
+  // 입장 메시지 스타일 (가운데 정렬)
+  joinMessageBubble: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    marginTop: 5,
+  },
+  joinMessageText: {
+    fontSize: 12,
+    color: '#999',
+    fontStyle: 'italic',
+  },
   // 정산 메시지 스타일
   settlementMessageBubble: {
     backgroundColor: '#E0E0E0',
@@ -718,6 +1110,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     marginBottom: 8,
+    fontWeight: '500',
+  },
+  // 게이지 바 스타일
+  progressContainer: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FFA726', // 주황색 (진행 중)
+    borderRadius: 4,
+  },
+  progressBarFillComplete: {
+    backgroundColor: '#4A90E2', // 파란색 (완료)
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
     fontWeight: '500',
   },
   acceptButton: {
@@ -810,10 +1228,10 @@ const styles = StyleSheet.create({
     maxHeight: 100,
   },
   sendButton: {
-    backgroundColor: '#666',
+    backgroundColor: '#4A90E2',
     paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 8,
     marginLeft: 10,
   },
   sendButtonText: {
@@ -827,6 +1245,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     padding: 15,
     justifyContent: 'space-between',
+    backgroundColor: '#f5f5f5',
+    maxHeight: 280, // 키보드 높이와 유사하게 고정
   },
   actionButton: {
     width: '30%',
@@ -848,8 +1268,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   actionButtonImage: {
-    width: 24,
-    height: 24,
+    width: 36,
+    height: 36,
     marginBottom: 6,
   },
   actionButtonText: {

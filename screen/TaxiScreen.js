@@ -14,6 +14,7 @@ import CreateRoomModal from '../modal/CreateRoomModal';
 import InviteCodeModal from '../modal/InviteCodeModal';
 import MemberCounter from '../components/MemberCounter';
 import LockIcon from '../components/LockIcon';
+import { joinRoom, getRoomDetail } from '../services/taxiApi';
 
 const TaxiScreen = ({ navigation }) => {
   const [selectedTab, setSelectedTab] = useState('taxi');
@@ -34,18 +35,51 @@ const TaxiScreen = ({ navigation }) => {
   const [availableRooms, setAvailableRooms] = useState([
     {
       room_id: 100,
-      departure: '기흥3번출',
+      departure: '기흥역3번출',
+      destination: '이공관',
+      current_count: 1,
+      max_members: 4,
+      host_id: 'host_user_001',
+      invite_code_enabled: true,
+      invite_code: '000001',
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    },
+    {
+      room_id: 101,
+      departure: '기흥역3번출',
       destination: '샬롬관',
       current_count: 2,
-      max_members: 2, // current_count와 동일하게 설정
-      host_id: 'host_user_001', // 테스트용 방장 ID
-      invite_code_enabled: true, // 초대코드 on
-      invite_code: '123456', // 초대코드
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      max_members: 4,
+      host_id: 'host_user_002',
+      invite_code_enabled: true,
+      invite_code: '000002',
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    },
+    {
+      room_id: 102,
+      departure: '기흥역3번출',
+      destination: '천은관',
+      current_count: 3,
+      max_members: 4,
+      host_id: 'host_user_003',
+      invite_code_enabled: true,
+      invite_code: '000003',
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    },
+    {
+      room_id: 103,
+      departure: '기흥역3번출',
+      destination: '교육관',
+      current_count: 4,
+      max_members: 4,
+      host_id: 'host_user_004',
+      invite_code_enabled: true,
+      invite_code: '000004',
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
     },
   ]);
-  // 방번호 관리 (100부터 시작)
-  const [nextRoomId, setNextRoomId] = useState(100);
+  // 방번호 관리 (104부터 시작 - 더미 데이터가 100~103까지 사용 중)
+  const [nextRoomId, setNextRoomId] = useState(104);
   // 현재 날짜 추적 (자정 리셋용)
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -74,10 +108,25 @@ const TaxiScreen = ({ navigation }) => {
     return () => clearInterval(interval);
   }, [currentDate]);
 
-  // 채팅방 나가기 시 참여 목록에서 제거
+  // 채팅방 나가기 시 참여 목록에서 제거 및 인원 수 감소
   const handleLeaveRoomFromChat = (roomId) => {
     if (!roomId) return;
+    
+    // 참여중인 채팅방 목록에서 제거
     setParticipatingRooms((prev) => prev.filter((room) => room.room_id !== roomId));
+    
+    // 사용 가능한 방 목록에서도 인원 수 감소
+    setAvailableRooms((prev) => 
+      prev.map((room) => {
+        if (room.room_id === roomId && room.current_count > 0) {
+          return {
+            ...room,
+            current_count: room.current_count - 1,
+          };
+        }
+        return room;
+      })
+    );
   };
 
   const navigateToChat = (roomData, isFromCreate = false) => {
@@ -106,6 +155,34 @@ const TaxiScreen = ({ navigation }) => {
     setInviteCodeModalVisible(true);
   };
 
+  // 방 목록 새로고침
+  const handleRefreshRooms = async () => {
+    try {
+      // API 호출 비활성화 - 더미 데이터로만 진행
+      // 실제로는 getRooms() API를 호출해야 함
+      // const rooms = await getRooms();
+      // setAvailableRooms(rooms);
+      
+      // 더미 데이터 모드: 현재 시간으로 업데이트
+      setAvailableRooms((prev) => 
+        prev.map((room) => ({
+          ...room,
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        }))
+      );
+      
+      // 참여중인 채팅방도 시간 업데이트
+      setParticipatingRooms((prev) =>
+        prev.map((room) => ({
+          ...room,
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        }))
+      );
+    } catch (error) {
+      console.error('방 목록 새로고침 실패:', error);
+    }
+  };
+
   // 방 생성 완료 후 채팅방으로 이동
   const handleRoomCreated = (roomData) => {
     setCreateRoomModalVisible(false);
@@ -120,20 +197,68 @@ const TaxiScreen = ({ navigation }) => {
   };
 
   // 초대코드로 입장 후 채팅방으로 이동
-  const handleInviteCodeEntered = (roomData, enteredCode) => {
+  const handleInviteCodeEntered = async (roomData, enteredCode) => {
+    console.log('handleInviteCodeEntered 호출:', roomData.room_id, enteredCode);
+    try {
+      // 인원이 가득 찬 경우 체크 (초대코드 모달에서 이미 증가시켰으므로 원래 값으로 체크)
+      const originalCount = roomData.current_count - 1; // 모달에서 증가시킨 값이므로 원래 값으로 복원
+      if (originalCount >= roomData.max_members) {
+        Alert.alert('알림', '인원이 가득 찼습니다.');
+        setInviteCodeModalVisible(false);
+        setSelectedRoomForInvite(null);
+        return;
+      }
+
+      // 모달 먼저 닫기
+      setInviteCodeModalVisible(false);
+      setSelectedRoomForInvite(null);
+      
+      // 초대코드가 맞았으므로 틀린 횟수 리셋
+      if (roomData.room_id) {
+        setRoomFailedAttempts((prev) => {
+          const updated = { ...prev };
+          delete updated[roomData.room_id];
+          return updated;
+        });
+      }
+
+      // API 호출 비활성화 - 더미 데이터로만 진행
+      const updatedRoomData = {
+        ...roomData,
+        current_count: originalCount + 1, // 참여 후 인원 수 증가
+      };
+      console.log('더미 데이터로 진행:', updatedRoomData);
+      
+      // API 호출 주석 처리 (나중에 활성화)
+      // try {
+      //   const response = await joinRoom(roomData.room_id);
+      //   updatedRoomData = await getRoomDetail(roomData.room_id);
+      // } catch (apiError) {
+      //   console.log('API 호출 실패:', apiError.message);
+      // }
+      
+      // 모달이 닫힌 후 네비게이션 (약간의 지연을 두어 모달이 완전히 닫힌 후 이동)
+      setTimeout(() => {
+        console.log('채팅방으로 이동:', updatedRoomData);
+        navigateToChat(updatedRoomData, false);
+      }, 100);
+    } catch (error) {
+      console.error('방 참여 에러:', error);
+      // 모달 닫기
     setInviteCodeModalVisible(false);
-    setSelectedRoomForInvite(null);
-    // 초대코드가 맞았으므로 틀린 횟수 리셋
-    if (roomData.room_id) {
-      setRoomFailedAttempts((prev) => {
-        const updated = { ...prev };
-        delete updated[roomData.room_id];
-        return updated;
-    });
+      setSelectedRoomForInvite(null);
+      
+      // 에러 메시지에 따라 다른 알림 표시
+      setTimeout(() => {
+        if (error.message === 'Room is full' || error.message.includes('인원 초과')) {
+          Alert.alert('알림', '인원이 가득 찼습니다.');
+        } else if (error.message === 'Room not found') {
+          Alert.alert('알림', '존재하지 않는 방입니다.');
+        } else {
+          Alert.alert('알림', error.message || '방 참여에 실패했습니다.');
+        }
+      }, 100);
     }
-    // 참여중인 채팅방 목록에 추가하지 않음 (운행 시작 시에만 추가)
-    // 채팅방으로 이동
-    navigateToChat(roomData, false);
   };
 
   // 초대코드가 틀렸을 때 호출되는 콜백
@@ -194,9 +319,10 @@ const TaxiScreen = ({ navigation }) => {
             </View>
             {participatingRooms.map((room) => {
               const currentCount = room.current_count || 0;
-              const maxMembers = 4; // 항상 4명으로 고정
+              const maxMembers = room.max_members || 4; // 방 생성 시 설정한 인원 수
               return (
               <View key={room.room_id} style={styles.roomItem}>
+                <View style={styles.roomListColumn}>
                   <View style={styles.roomNumberWithLock}>
                     <Text style={styles.roomNumberText}>{room.room_id}</Text>
                     {room.invite_code_enabled && (
@@ -205,21 +331,29 @@ const TaxiScreen = ({ navigation }) => {
                       </View>
                     )}
                   </View>
+                </View>
+                <View style={styles.roomListColumn}>
                 <View style={styles.destinationContainer}>
                   <Text style={styles.destinationText}>{room.departure || '출발지'}</Text>
-                  <Text style={styles.destinationArrow}>→</Text>
-                  <Text style={styles.destinationText}>{room.destination || '도착지'}</Text>
+                    <Text style={styles.destinationText}>→ {room.destination || '도착지'}</Text>
+                  </View>
                 </View>
+                <View style={styles.roomListColumn}>
                 <Text style={styles.roomItemText}>{room.time || ''}</Text>
+                </View>
+                <View style={styles.roomListColumn}>
                   <View style={styles.memberCounterWrapper}>
                     <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
                   </View>
+                </View>
+                <View style={styles.roomListColumn}>
                 <TouchableOpacity 
                   style={styles.enterButton}
                   onPress={() => handleEnterRoom(room)}
                 >
                   <Text style={styles.enterButtonText}>입장</Text>
                 </TouchableOpacity>
+              </View>
               </View>
               );
             })}
@@ -229,38 +363,72 @@ const TaxiScreen = ({ navigation }) => {
         {/* 채팅방 목록 헤더 */}
         <View style={styles.section}>
           <View style={styles.listHeader}>
+            <View style={styles.roomListColumn}>
             <Text style={styles.listHeaderText}>방 번호</Text>
+            </View>
+            <View style={styles.roomListColumn}>
             <Text style={styles.listHeaderText}>목적지</Text>
+            </View>
+            <View style={styles.roomListColumn}>
             <Text style={styles.listHeaderText}>출발시간</Text>
+            </View>
+            <View style={styles.roomListColumn}>
             <Text style={styles.listHeaderText}>인원현황</Text>
+            </View>
+            <View style={styles.roomListColumn}>
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={handleRefreshRooms}
+              >
+                <Text style={styles.refreshButtonText} numberOfLines={1}>새로고침</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           {/* 다른 사람들이 생성한 방 목록 (더미 데이터) */}
           {availableRooms.map((room) => {
             const currentCount = room.current_count || 0;
-            const maxMembers = 4; // 항상 4명으로 고정
+            const maxMembers = room.max_members || 4; // 방 생성 시 설정한 인원 수
             return (
               <View key={room.room_id} style={styles.roomListItem}>
-                <View style={styles.roomNumberWithLock}>
-                  <Text style={styles.roomListNumber}>{room.room_id}</Text>
-                  {room.invite_code_enabled && (
-                    <LockIcon size={18} />
-                  )}
+                <View style={styles.roomListColumn}>
+                  <View style={styles.roomNumberWithLock}>
+                    <Text style={styles.roomListNumber}>{room.room_id}</Text>
+                    {room.invite_code_enabled && (
+                      <LockIcon size={18} />
+                    )}
+                  </View>
                 </View>
-                <View style={styles.roomListDestination}>
-                  <Text style={styles.roomListDestinationText}>
-                    {room.departure || '출발지'}
-                  </Text>
-                  <Text style={styles.roomListDestinationText}>
-                    → {room.destination || '도착지'}
-                  </Text>
+                <View style={styles.roomListColumn}>
+                  <View style={styles.roomListDestination}>
+                    <Text style={styles.roomListDestinationText}>
+                      {room.departure || '출발지'}
+                    </Text>
+                    <Text style={styles.roomListDestinationText}>
+                      → {room.destination || '도착지'}
+                    </Text>
+                  </View>
                 </View>
-                <Text style={styles.roomListTime}>{room.time || ''}</Text>
-                <View style={styles.roomListMemberCounter}>
-                  <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
+                <View style={styles.roomListColumn}>
+                  <Text style={styles.roomListTime}>{room.time || ''}</Text>
                 </View>
-                <TouchableOpacity 
-                  style={styles.roomListEnterButton}
-                  onPress={() => {
+                <View style={styles.roomListColumn}>
+                  <View style={styles.roomListMemberCounter}>
+                    <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
+                  </View>
+                </View>
+                <View style={styles.roomListColumn}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.roomListEnterButton,
+                      (currentCount >= maxMembers) && styles.roomListEnterButtonDisabled
+                    ]}
+                    onPress={async () => {
+                    // 인원이 가득 찬 경우 입장 불가
+                    if (currentCount >= maxMembers) {
+                      Alert.alert('알림', '인원이 가득 찼습니다.');
+                      return;
+                    }
+
                     // 초대코드가 필요한 방인지 확인
                     if (room.invite_code_enabled) {
                       // 틀린 횟수가 3회 이상인지 확인
@@ -274,17 +442,42 @@ const TaxiScreen = ({ navigation }) => {
                       // 선택된 방 정보 저장 (초대코드 검증용)
                       setSelectedRoomForInvite(room);
                     } else {
-                      // 자유롭게 입장
-                      const roomData = {
+                      // 자유롭게 입장 (더미 데이터 모드)
+                      const updatedRoomData = {
                         ...room,
-                        current_count: room.current_count + 1,
+                        current_count: (room.current_count || 0) + 1,
                       };
-                      handleInviteCodeEntered(roomData);
+                      
+                      // 채팅방으로 이동
+                      navigateToChat(updatedRoomData, false);
+                      
+                      // API 호출 주석 처리 (나중에 활성화)
+                      // try {
+                      //   const response = await joinRoom(room.room_id);
+                      //   const updatedRoomData = await getRoomDetail(room.room_id);
+                      //   navigateToChat(updatedRoomData, false);
+                      // } catch (error) {
+                      //   console.error('방 참여 에러:', error);
+                      //   if (error.message === 'Room is full' || error.message.includes('인원 초과')) {
+                      //     Alert.alert('알림', '인원이 가득 찼습니다.');
+                      //   } else if (error.message === 'Room not found') {
+                      //     Alert.alert('알림', '존재하지 않는 방입니다.');
+                      //   } else {
+                      //     Alert.alert('알림', error.message || '방 참여에 실패했습니다.');
+                      //   }
+                      // }
                     }
                   }}
+                  disabled={currentCount >= maxMembers}
                 >
-                  <Text style={styles.roomListEnterButtonText}>입장</Text>
-                </TouchableOpacity>
+                  <Text style={[
+                    styles.roomListEnterButtonText,
+                    (currentCount >= maxMembers) && styles.roomListEnterButtonTextDisabled
+                  ]}>
+                    입장
+                  </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })}
@@ -393,7 +586,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: 'white',
     paddingVertical: 20,
     borderRadius: 8,
     alignItems: 'center',
@@ -410,7 +603,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sectionHeader: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: 'white',
     paddingVertical: 10,
     paddingHorizontal: 15,
     marginBottom: 5,
@@ -423,139 +616,146 @@ const styles = StyleSheet.create({
   // 참여중인 채팅방 아이템
   roomItem: {
     flexDirection: 'row',
-    backgroundColor: '#E0E0E0',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    backgroundColor: 'white',
+    paddingVertical: 16,
+    paddingHorizontal: 15,
     marginBottom: 5,
     alignItems: 'center',
   },
   roomNumberWithLock: {
     flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 50,
-    marginRight: 10,
+    justifyContent: 'center',
   },
   roomNumberText: {
     fontSize: 14,
     color: '#333',
-    textAlign: 'left',
+    textAlign: 'center',
   },
   roomItemText: {
-    flex: 1,
     fontSize: 14,
     color: '#333',
     textAlign: 'center',
   },
   destinationContainer: {
-    flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    flexWrap: 'wrap',
   },
   destinationText: {
     fontSize: 12,
     color: '#333',
     textAlign: 'center',
-  },
-  destinationArrow: {
-    fontSize: 12,
-    color: '#333',
-    marginHorizontal: 4,
+    lineHeight: 18,
   },
   memberCounterWrapper: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   enterButton: {
-    backgroundColor: '#E0E0E0',
-    paddingHorizontal: 20,
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    minWidth: 60,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 50,
   },
   enterButtonText: {
     fontSize: 14,
-    color: '#333',
+    color: '#fff',
     fontWeight: '500',
   },
   // 채팅방 목록 헤더
   listHeader: {
     flexDirection: 'row',
-    backgroundColor: '#E0E0E0',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    backgroundColor: 'white',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
   },
   listHeaderText: {
-    flex: 1,
     fontSize: 14,
     color: '#333',
     textAlign: 'center',
     fontWeight: '500',
   },
+  // 5개 컬럼 레이아웃을 위한 공통 스타일
+  roomListColumn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButtonText: {
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '500',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
   // 채팅방 목록 아이템
   roomListItem: {
     flexDirection: 'row',
-    backgroundColor: '#E0E0E0',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    backgroundColor: 'white',
+    paddingVertical: 16,
+    paddingHorizontal: 15,
     marginBottom: 5,
     alignItems: 'center',
-  },
-  roomNumberWithLock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 50,
-    marginRight: 10,
   },
   roomListNumber: {
     fontSize: 14,
     color: '#333',
-    textAlign: 'left',
+    textAlign: 'center',
   },
   roomListDestination: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'column',
   },
   roomListDestinationText: {
     fontSize: 12,
     color: '#333',
     textAlign: 'center',
+    lineHeight: 18,
   },
   roomListTime: {
-    flex: 1,
     fontSize: 12,
     color: '#333',
     textAlign: 'center',
   },
   roomListMemberCounter: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   roomListEnterButton: {
-    backgroundColor: '#E0E0E0',
-    paddingHorizontal: 20,
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    minWidth: 60,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 50,
+  },
+  roomListEnterButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
   roomListEnterButtonText: {
     fontSize: 14,
-    color: '#333',
+    color: '#fff',
     fontWeight: '500',
+  },
+  roomListEnterButtonTextDisabled: {
+    color: '#666',
   },
   // 하단 네비게이션
   bottomNav: {

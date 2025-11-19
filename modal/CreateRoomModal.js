@@ -13,7 +13,7 @@ import {
 const LOCATIONS = [
   '기흥3번출',
   '기흥4번출',
-  '강남대역',
+  '강대역1번',
   '샬롬관',
   '인사관',
   '이공관',
@@ -61,14 +61,14 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
   const handleDirectInputComplete = () => {
     // 출발지와 도착지를 각각 입력된 값으로 설정
     if (directDeparture) {
-      setDeparture(directDeparture);
+        setDeparture(directDeparture);
     }
     if (directDestination) {
-      setDestination(directDestination);
-    }
-    setDirectInputMode(false);
-    setDirectDeparture('');
-    setDirectDestination('');
+        setDestination(directDestination);
+      }
+      setDirectInputMode(false);
+      setDirectDeparture('');
+      setDirectDestination('');
   };
 
   // 직접 입력 모달 닫기
@@ -115,7 +115,7 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
       invite_code_enabled: inviteCodeEnabled,
       // UI 표시용 추가 필드
       members: `${maxMembers}명`,
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
     };
 
     // 방 생성 완료 화면 표시
@@ -150,7 +150,7 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
     <Modal
       visible={visible}
       transparent={true}
-      animationType="slide"
+      animationType="fade"
       onRequestClose={handleClose}
     >
       <View style={styles.modalOverlay}>
@@ -221,57 +221,141 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
               <ScrollView style={styles.modalBody}>
             {/* 출발지/도착지 섹션 */}
             <View style={styles.locationSection}>
-              <View style={styles.locationRow}>
-                <Text style={styles.locationLabel}>출발지</Text>
-                <TextInput
-                  style={styles.locationInput}
-                  placeholder="출발지 선택"
-                  value={departure}
-                  editable={false}
-                />
+              {/* 레이블 행 */}
+              <View style={styles.locationLabelRow}>
+                <View style={styles.locationLabelColumn}>
+                  <Text style={styles.locationLabel}>출발지</Text>
+                </View>
+                <View style={styles.locationLabelColumn}>
+                  <Text style={styles.locationLabel}>도착지</Text>
+                </View>
               </View>
-              <View style={styles.locationRow}>
-                <Text style={styles.locationLabel}>도착지</Text>
-                <TextInput
-                  style={styles.locationInput}
-                  placeholder="도착지 선택"
-                  value={destination}
-                  editable={false}
-                />
+              {/* 입력 필드 행 */}
+              <View style={styles.locationInputRow}>
+                <View style={[styles.locationInputColumn, styles.locationInputColumnFirst]}>
+                  <TextInput
+                    style={[
+                      styles.locationInput,
+                      departure && styles.locationInputSelected
+                    ]}
+                    placeholder="출발지 선택"
+                    value={departure}
+                    editable={false}
+                  />
+                </View>
+                <View style={styles.locationInputColumn}>
+                  <TextInput
+                    style={[
+                      styles.locationInput,
+                      destination && styles.locationInputSelected
+                    ]}
+                    placeholder="도착지 선택"
+                    value={destination}
+                    editable={false}
+                  />
+                </View>
               </View>
             </View>
 
+            {/* 구분선 */}
+            <View style={styles.divider} />
 
             {/* 위치 선택 버튼 그리드 */}
-            <View style={styles.locationGrid}>
-              {LOCATIONS.map((location, index) => {
-                const isSelected = departure === location || destination === location;
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.locationButton,
-                      isSelected && styles.settingOptionActive,
-                    ]}
-                    onPress={() => handleLocationSelect(location)}
-                  >
-                    <Text
+            <View style={styles.locationGridContainer}>
+              {/* 첫 번째 줄: 기흥3번출, 기흥4번출, 강대역1번 (3개) */}
+              <View style={styles.locationRow}>
+                {LOCATIONS.slice(0, 3).map((location, index) => {
+                  const isSelected = departure === location || destination === location;
+                  const isLast = index === 2;
+                  return (
+                    <TouchableOpacity
+                      key={index}
                       style={[
-                        styles.locationButtonText,
-                        isSelected && styles.settingOptionTextActive,
+                        styles.locationButton,
+                        styles.locationButtonFirstRow,
+                        isLast && styles.locationButtonLast,
+                        isSelected && styles.settingOptionActive,
                       ]}
+                      onPress={() => handleLocationSelect(location)}
                     >
-                      {location}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                      <Text
+                        style={[
+                          styles.locationButtonText,
+                          isSelected && styles.settingOptionTextActive,
+                        ]}
+                      >
+                        {location}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+            </View>
+
+              {/* 두 번째 줄: 샬롬관, 인사관, 이공관, 천은관 (4개) */}
+              <View style={styles.locationRow}>
+                {LOCATIONS.slice(3, 7).map((location, index) => {
+                  const isSelected = departure === location || destination === location;
+                  const isLast = index === 3;
+                  return (
+                <TouchableOpacity
+                      key={index + 3}
+                      style={[
+                        styles.locationButton,
+                        styles.locationButtonDefault,
+                        isLast && styles.locationButtonLast,
+                        isSelected && styles.settingOptionActive,
+                      ]}
+                      onPress={() => handleLocationSelect(location)}
+                >
+                      <Text
+                        style={[
+                          styles.locationButtonText,
+                          isSelected && styles.settingOptionTextActive,
+                        ]}
+                      >
+                        {location}
+                      </Text>
+                </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* 세 번째 줄: 심전관, 교육관, 예술관 (3개) + 직접입력 */}
+              <View style={styles.locationRow}>
+                {LOCATIONS.slice(7, 10).map((location, index) => {
+                  const isSelected = departure === location || destination === location;
+                  return (
+                <TouchableOpacity
+                      key={index + 7}
+                      style={[
+                        styles.locationButton,
+                        styles.locationButtonDefault,
+                        isSelected && styles.settingOptionActive,
+                      ]}
+                  onPress={() => handleLocationSelect(location)}
+                >
+                      <Text
+                        style={[
+                          styles.locationButtonText,
+                          isSelected && styles.settingOptionTextActive,
+                        ]}
+                      >
+                        {location}
+                      </Text>
+                </TouchableOpacity>
+                  );
+                })}
               <TouchableOpacity
-                style={styles.locationButton}
+                  style={[
+                    styles.locationButton,
+                    styles.locationButtonDefault,
+                    styles.locationButtonLast,
+                  ]}
                 onPress={() => handleLocationSelect('직접 입력')}
               >
                 <Text style={styles.locationButtonText}>직접 입력</Text>
               </TouchableOpacity>
+              </View>
             </View>
 
             {/* 인원 설정 */}
@@ -395,7 +479,7 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
       <Modal
         visible={directInputMode}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={handleDirectInputClose}
       >
         <View style={styles.modalOverlay}>
@@ -500,23 +584,47 @@ const styles = StyleSheet.create({
   locationSection: {
     marginBottom: 15,
   },
-  locationRow: {
+  divider: {
+    height: 5,
+    backgroundColor: '#ccc',
+    marginVertical: 5,
+  },
+  locationLabelRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  locationLabelColumn: {
+    flex: 1,
     alignItems: 'center',
-    marginBottom: 10,
+  },
+  locationInputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  locationInputColumn: {
+    flex: 1,
+  },
+  locationInputColumnFirst: {
+    marginRight: 8,
   },
   locationLabel: {
-    width: 60,
-    fontSize: 16,
+    fontSize: 20,
     color: '#333',
+    fontWeight: 'bold',
   },
   locationInput: {
-    flex: 1,
-    backgroundColor: '#E0E0E0',
+    width: '100%',
+    backgroundColor: 'white',
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 4,
-    fontSize: 14,
+    borderRadius: 16,
+    fontSize: 24,
+    color: '#333',
+    textAlign: 'center',
+  },
+  locationInputSelected: {
+    backgroundColor: '#4A90E2',
     color: '#333',
   },
   // 직접 입력 모달
@@ -564,20 +672,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   // 위치 버튼 그리드
-  locationGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  locationGridContainer: {
     marginBottom: 20,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
   },
   locationButton: {
     backgroundColor: '#E0E0E0',
-    paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  locationButtonFirstRow: {
+    flex: 1,
     marginRight: 8,
-    marginBottom: 8,
+  },
+  locationButtonDefault: {
+    flex: 1,
+    marginRight: 8,
+  },
+  locationButtonLast: {
+    marginRight: 0,
   },
   locationButtonText: {
     fontSize: 14,
@@ -600,7 +718,7 @@ const styles = StyleSheet.create({
   settingOption: {
     paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 16,
     backgroundColor: '#E0E0E0',
     marginRight: 10,
   },
@@ -687,7 +805,7 @@ const styles = StyleSheet.create({
   },
   startChattingButton: {
     width: '100%',
-    backgroundColor: '#666',
+    backgroundColor: '#4A90E2',
     paddingVertical: 15,
     borderRadius: 8,
     alignItems: 'center',

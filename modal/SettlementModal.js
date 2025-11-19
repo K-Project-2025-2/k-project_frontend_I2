@@ -22,14 +22,47 @@ const SettlementModal = ({ visible, onClose, roomData, onSettlementSubmit, initi
       setSelectedMemberCount(Object.keys(initialSettlementData.individualCosts || {}).length || 4);
     } else {
       // initialSettlementData가 없으면 초기화
+      // roomData의 current_count 또는 members 배열 길이를 기본값으로 사용
+      const defaultCount = roomData?.current_count || 
+                          (roomData?.members?.length) || 
+                          (roomData?.participants?.length) ||
+                          (roomData?.member_names?.length) ||
+                          4;
       setTotalCost('');
-      setSelectedMemberCount(4);
+      setSelectedMemberCount(defaultCount);
       setIndividualCosts({});
     }
-  }, [initialSettlementData, visible]);
+  }, [initialSettlementData, visible, roomData]);
 
   // 이용자 이름 생성 (방장이 첫 번째)
+  // roomData에서 실제 참여자 이름 목록을 가져오거나, 없으면 더미 데이터 사용
   const getMemberNames = (count) => {
+    // roomData에 members 배열이 있고 각 항목에 name이 있는 경우
+    if (roomData?.members && Array.isArray(roomData.members) && roomData.members.length > 0) {
+      // members 배열에서 name 추출 (방장이 첫 번째)
+      const names = roomData.members.map((member, index) => {
+        if (index === 0) {
+          // 첫 번째는 방장
+          return member.name || member.user_name || '방장';
+        }
+        return member.name || member.user_name || `이용자${index}`;
+      });
+      // 선택한 인원 수만큼만 반환
+      return names.slice(0, count);
+    }
+    
+    // roomData에 participants 배열이 있는 경우
+    if (roomData?.participants && Array.isArray(roomData.participants) && roomData.participants.length > 0) {
+      const names = roomData.participants.slice(0, count);
+      return names;
+    }
+    
+    // API에서 받아올 것으로 예상되는 구조: roomData.member_names
+    if (roomData?.member_names && Array.isArray(roomData.member_names) && roomData.member_names.length > 0) {
+      return roomData.member_names.slice(0, count);
+    }
+    
+    // 더미 데이터 (API 연동 전까지 사용)
     const names = ['방장'];
     for (let i = 1; i < count; i++) {
       names.push(`이용자${i}`);
@@ -107,7 +140,7 @@ const SettlementModal = ({ visible, onClose, roomData, onSettlementSubmit, initi
     <Modal
       visible={visible}
       transparent={true}
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>

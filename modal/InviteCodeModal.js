@@ -38,7 +38,11 @@ const InviteCodeModal = ({ visible, onClose, onEnter, onCodeFailed, targetRoom =
     // 특정 방에 대한 초대코드 검증 (targetRoom이 있는 경우)
     // 채팅방 목록에서 입장 버튼 클릭 시 특정 방의 초대코드 검증
     if (targetRoom && targetRoom.invite_code_enabled) {
-      if (trimmedCode !== targetRoom.invite_code) {
+      // 문자열 비교 (양쪽 모두 문자열로 변환하여 비교)
+      const roomCode = String(targetRoom.invite_code || '').trim();
+      const inputCode = String(trimmedCode).trim();
+      
+      if (roomCode !== inputCode) {
         // 코드가 틀렸을 때 틀린 횟수 증가
         if (onCodeFailed) {
           onCodeFailed(targetRoom.room_id);
@@ -59,17 +63,33 @@ const InviteCodeModal = ({ visible, onClose, onEnter, onCodeFailed, targetRoom =
 
     // 모든 방 목록에서 초대코드로 방 찾기
     // availableRooms와 participatingRooms를 합쳐서 검색
+    console.log('초대코드 검색:', trimmedCode);
+    console.log('검색할 방 목록:', allRooms.map(r => ({ id: r.room_id, code: r.invite_code, enabled: r.invite_code_enabled })));
+    
     const foundRoom = allRooms.find(
-      (room) => room.invite_code_enabled && room.invite_code === trimmedCode
+      (room) => {
+        // 초대코드가 활성화되어 있고, 초대코드가 일치하는지 확인
+        if (!room.invite_code_enabled) return false;
+        // 문자열 비교 (양쪽 모두 문자열로 변환하여 비교)
+        const roomCode = String(room.invite_code || '').trim();
+        const inputCode = String(trimmedCode).trim();
+        const isMatch = roomCode === inputCode;
+        if (isMatch) {
+          console.log('방 찾음:', room.room_id, roomCode);
+        }
+        return isMatch;
+      }
     );
 
     if (!foundRoom) {
+      console.log('방을 찾을 수 없음');
       Alert.alert('알림', '존재하지 않는 방입니다');
       setInviteCode('');
       return;
     }
 
     // 초대코드가 맞는 방을 찾았으면 해당 방으로 입장
+    console.log('입장할 방:', foundRoom.room_id);
     const roomData = {
       ...foundRoom,
       current_count: (foundRoom.current_count || 0) + 1,
@@ -82,7 +102,7 @@ const InviteCodeModal = ({ visible, onClose, onEnter, onCodeFailed, targetRoom =
     <Modal
       visible={visible}
       transparent={true}
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
@@ -192,7 +212,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   enterButton: {
-    backgroundColor: '#666',
+    backgroundColor: '#4A90E2',
     paddingVertical: 15,
     borderRadius: 6,
     alignItems: 'center',

@@ -14,11 +14,13 @@ const LockIcon = ({ size = 16 }) => {
   // 이미지 파일이 있으면 Image 컴포넌트 사용
   if (lockImage) {
     return (
-      <Image
-        source={lockImage}
-        style={[styles.lockIcon, { width: size, height: size }]}
-        resizeMode="contain"
-      />
+      <View style={[styles.imageContainer, { width: size, height: size }]}>
+        <Image
+          source={lockImage}
+          style={styles.lockIcon}
+          resizeMode="contain"
+        />
+      </View>
     );
   }
 
@@ -72,7 +74,17 @@ const LockIcon = ({ size = 16 }) => {
 };
 
 const styles = StyleSheet.create({
+  imageContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    overflow: 'visible', // 고리 안쪽이 보이도록 visible로 변경
+  },
   lockIcon: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+    tintColor: undefined, // 이미지 색상 그대로 유지
     // 이미지가 깨지지 않도록 contain 모드 사용
   },
   container: {
