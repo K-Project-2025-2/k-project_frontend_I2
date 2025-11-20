@@ -13,48 +13,82 @@ const menuItems = [
   '프로필',
   '계좌등록',
   '알림설정',
-  '이용지수 온도',
   '분실물 신고',
   '보증금',
   '고객센터 문의',
 ];
 
-const MyPageScreen = ({ navigation }) => {
+const MyPageScreen = ({ navigation, route }) => {
+  const email = route?.params?.email || "";
+  const password = route?.params?.password || "";
 
-  const handleCopyAccount = () => {
-    Alert.alert('복사 완료', '계좌번호가 클립보드에 복사되었습니다.');
+  const bank = route?.params?.bank || "";
+  const accountNumber = route?.params?.accountNumber || "";
+
+  const handleCopyAccount = (number) => {
+    Alert.alert('복사 완료', `${number} 복사되었습니다.`);
   };
 
   const handleMenuItemPress = (item) => {
-    Alert.alert('페이지 이동', `${item} 화면으로 이동합니다.`);
+    if (item === '계좌등록') {
+      navigation.navigate('AccountRegister');
+      return;
+    }
 
+    if (item === '분실물 신고') {
+      navigation.navigate('LostItem');
+      return;
+    }
+
+    if (item === '프로필') {
+      navigation.navigate('Profile', {
+        email,
+        password,
+      });
+      return;
+    }
+
+    if (item === '알림설정') {
+      navigation.navigate('NotificationSetting');
+      return;
+    }
+
+    if (item === '보증금') {
+      navigation.navigate('Deposit');
+      return;
+    }
+
+    if (item === '고객센터 문의') {
+      navigation.navigate('CustomerSupport');
+      return;
+    }
+
+    Alert.alert('페이지 이동', `${item} 화면으로 이동합니다.`);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container}>
-        {/* 1. 프로필 섹션 */}
         <View style={styles.profileSection}>
           <View style={styles.avatar} />
-          <Text style={styles.nameText}>???</Text>
+          <Text style={styles.nameText}>강승재</Text>
         </View>
 
-        {/* 2. 계좌 섹션 */}
         <View style={styles.accountSection}>
           <View>
             <Text style={styles.accountText}>계좌번호</Text>
-            <Text style={styles.bankText}>??은행</Text>
-            <Text style={styles.accountNumberText}>145234511245</Text>
+            <Text style={styles.bankText}>{bank}</Text>
+            <Text style={styles.accountNumberText}>{accountNumber}</Text>
           </View>
+
           <TouchableOpacity
             style={styles.copyButton}
-            onPress={handleCopyAccount}
+            onPress={() => handleCopyAccount(accountNumber)}
           >
             <Text style={styles.copyButtonText}>복사</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 3. 메뉴 리스트 */}
         <View style={styles.menuListSection}>
           {menuItems.map((item, index) => (
             <TouchableOpacity
@@ -71,7 +105,8 @@ const MyPageScreen = ({ navigation }) => {
   );
 };
 
-//스타일시트
+export default MyPageScreen;
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -108,12 +143,11 @@ const styles = StyleSheet.create({
   accountText: {
     fontSize: 16,
     fontWeight: 'bold',
-
   },
   bankText: {
     fontSize: 14,
     color: '#555',
-    marginTop:3,
+    marginTop: 3,
   },
   accountNumberText: {
     fontSize: 14,
@@ -142,5 +176,3 @@ const styles = StyleSheet.create({
     fontSize: 17,
   },
 });
-
-export default MyPageScreen;

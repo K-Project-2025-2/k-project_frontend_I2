@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Alert,
 } from 'react-native';
 
 const LoginScreen = ({ navigation }) => {
@@ -24,8 +23,10 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
-    // 로그인 성공 시 메인 화면으로 이동
-    navigation.replace('Main');
+    navigation.replace('Main', {
+      email: `${emailId}@kangnam.ac.kr`,
+      password: password,
+    });
   };
 
   const handleSignup = () => {
@@ -35,11 +36,9 @@ const LoginScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      
       <View style={styles.card}>
         <Text style={styles.title}>로그인</Text>
-        
-        {/* 학교 이메일 섹션 */}
+
         <View style={styles.inputSection}>
           <Text style={styles.label}>학교 이메일</Text>
           <View style={styles.emailContainer}>
@@ -49,6 +48,7 @@ const LoginScreen = ({ navigation }) => {
               placeholderTextColor="#999"
               value={emailId}
               onChangeText={setEmailId}
+              autoCapitalize="none"
             />
             <View style={styles.domainContainer}>
               <Text style={styles.domainText}>@kangnam.ac.kr</Text>
@@ -56,7 +56,6 @@ const LoginScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* 비밀번호 섹션 */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>비밀번호</Text>
           <TextInput
@@ -69,15 +68,12 @@ const LoginScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* 에러 메시지 */}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {/* 로그인 버튼 */}
         <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>로그인</Text>
         </TouchableOpacity>
 
-        {/* 회원가입 링크 */}
         <TouchableOpacity onPress={handleSignup}>
           <Text style={styles.signupText}>
             계정이 없으신가요? <Text style={styles.signupLink}>회원가입</Text>
@@ -87,6 +83,8 @@ const LoginScreen = ({ navigation }) => {
     </View>
   );
 };
+
+export default LoginScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -103,10 +101,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
@@ -188,5 +183,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
-export default LoginScreen;
