@@ -15,14 +15,9 @@ import ProfileScreen from './screens/ProfileScreen';
 import NotificationSettingScreen from './screens/NotificationSettingScreen';
 import DepositScreen from './screens/DepositScreen';
 import CustomerSupportScreen from './screens/CustomerSupportScreen';
-
-function TaxiScreen() {
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text>택시 스크린 (임시)</Text>
-    </View>
-  );
-}
+import TaxiScreen from './screen/TaxiScreen';
+import ChatScreen from './screen/ChatScreen';
+import ReportScreen from './screen/ReportScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -84,8 +79,6 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="Main" component={MainTabNavigator} />
-
-
 
         {/* 기타 화면들 */}
         <Stack.Screen
@@ -151,7 +144,18 @@ export default function App() {
          }}
        />
 
+        {/* 택시 관련 화면 */}
+        <Stack.Screen 
+          name="Chat" 
+          component={ChatScreen} 
+        />
+        <Stack.Screen 
+          name="Report" 
+          component={ReportScreen} 
+        />
+
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
+
