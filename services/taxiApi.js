@@ -1,5 +1,5 @@
 // 택시 API 서비스
-// 나중에 백엔드 연동 시 사용할 API 함수들
+// 백엔드 API 연동 함수들
 
 const API_BASE_URL = 'https://your-api-domain.com'; // 실제 API 주소로 변경 필요
 
@@ -9,8 +9,10 @@ const getAuthToken = async () => {
   return 'Bearer token'; // 임시
 };
 
+// ==================== 방 관련 API ====================
+
 // 방 생성
-export const createRoom = async (departure, destination, maxMembers) => {
+export const createRoom = async (departure, destination, maxMembers, inviteCodeEnabled) => {
   try {
     const token = await getAuthToken();
     const response = await fetch(`${API_BASE_URL}/taxi/rooms`, {
@@ -23,6 +25,7 @@ export const createRoom = async (departure, destination, maxMembers) => {
         departure,
         destination,
         max_members: maxMembers,
+        invite_code_enabled: inviteCodeEnabled,
       }),
     });
 
@@ -50,7 +53,7 @@ export const getRooms = async () => {
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.rooms;
+      return data.rooms || data.data || data;
     } else {
       throw new Error('방 목록 조회 실패');
     }
@@ -71,7 +74,8 @@ export const getRoomDetail = async (roomId) => {
     });
 
     if (response.status === 200) {
-      return await response.json();
+      const data = await response.json();
+      return data.data || data;
     } else if (response.status === 404) {
       throw new Error('Room not found');
     } else {
@@ -96,10 +100,11 @@ export const joinRoom = async (roomId) => {
     });
 
     if (response.status === 200) {
-      return await response.json();
+      const data = await response.json();
+      return data.data || data;
     } else if (response.status === 400) {
       const error = await response.json();
-      throw new Error(error.error || '인원 초과');
+      throw new Error(error.error || error.message || '인원 초과');
     } else if (response.status === 404) {
       throw new Error('Room not found');
     } else {
@@ -110,6 +115,32 @@ export const joinRoom = async (roomId) => {
     throw error;
   }
 };
+
+// 방 종료 (방장만 가능)
+export const closeRoom = async (roomId) => {
+  try {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/close`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      },
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      return data.data || data;
+    } else {
+      throw new Error('방 종료 실패');
+    }
+  } catch (error) {
+    console.error('방 종료 에러:', error);
+    throw error;
+  }
+};
+
+// ==================== 메시지 관련 API ====================
 
 // 채팅 메시지 보내기
 export const sendMessage = async (roomId, message) => {
@@ -127,7 +158,8 @@ export const sendMessage = async (roomId, message) => {
     });
 
     if (response.status === 201) {
-      return await response.json();
+      const data = await response.json();
+      return data.data || data;
     } else if (response.status === 404) {
       throw new Error('Room not found');
     } else {
@@ -156,7 +188,7 @@ export const getMessages = async (roomId, after = null) => {
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.messages;
+      return data.messages || data.data || data;
     } else {
       throw new Error('메시지 조회 실패');
     }
@@ -165,6 +197,131 @@ export const getMessages = async (roomId, after = null) => {
     throw error;
   }
 };
+
+// ==================== 운행 수락 관련 API ====================
+
+// 운행 시작 API
+export const startOperation = async (roomId) => {
+  try {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/operation/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      },
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      return data.data || data;
+    } else if (response.status === 400) {
+      const error = await response.json();
+      throw new Error(error.error || error.message || '운행 시작 실패');
+    } else if (response.status === 404) {
+      throw new Error('Room not found');
+    } else if (response.status === 409) {
+      const error = await response.json();
+      throw new Error(error.error || error.message || '이미 운행이 시작되었습니다.');
+    } else {
+      throw new Error('운행 시작 실패');
+    }
+  } catch (error) {
+    console.error('운행 시작 에러:', error);
+    throw error;
+  }
+};
+
+// 운행 수락 API
+export const acceptOperation = async (roomId) => {
+  try {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/operation/accept`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      },
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      return data.data || data;
+    } else if (response.status === 400) {
+      const error = await response.json();
+      throw new Error(error.error || error.message || '운행 수락 실패');
+    } else if (response.status === 404) {
+      throw new Error('Room not found');
+    } else {
+      throw new Error('운행 수락 실패');
+    }
+  } catch (error) {
+    console.error('운행 수락 에러:', error);
+    throw error;
+  }
+};
+
+// 운행 수락 상태 조회 API
+export const getOperationStatus = async (roomId, lastAcceptedAt = null) => {
+  try {
+    let url = `${API_BASE_URL}/taxi/rooms/${roomId}/operation/status`;
+    if (lastAcceptedAt) {
+      url += `?last_accepted_at=${lastAcceptedAt}`;
+    }
+
+    const token = await getAuthToken();
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      },
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      return data.data || data;
+    } else if (response.status === 404) {
+      throw new Error('Room not found');
+    } else {
+      throw new Error('운행 상태 조회 실패');
+    }
+  } catch (error) {
+    console.error('운행 상태 조회 에러:', error);
+    throw error;
+  }
+};
+
+// 운행 종료 API
+export const endOperation = async (roomId) => {
+  try {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/operation/end`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      },
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      return data.data || data;
+    } else if (response.status === 400) {
+      const error = await response.json();
+      throw new Error(error.error || error.message || '운행 종료 실패');
+    } else if (response.status === 404) {
+      throw new Error('Room not found');
+    } else {
+      throw new Error('운행 종료 실패');
+    }
+  } catch (error) {
+    console.error('운행 종료 에러:', error);
+    throw error;
+  }
+};
+
+// ==================== 정산 관련 API ====================
 
 // 정산 금액 입력 (방장만 가능)
 export const createSplit = async (roomId, totalAmount) => {
@@ -182,7 +339,8 @@ export const createSplit = async (roomId, totalAmount) => {
     });
 
     if (response.status === 200) {
-      return await response.json();
+      const data = await response.json();
+      return data.data || data;
     } else {
       throw new Error('정산 생성 실패');
     }
@@ -203,7 +361,8 @@ export const getSplit = async (roomId) => {
     });
 
     if (response.status === 200) {
-      return await response.json();
+      const data = await response.json();
+      return data.data || data;
     } else {
       throw new Error('정산 정보 조회 실패');
     }
@@ -226,7 +385,8 @@ export const confirmPayment = async (roomId) => {
     });
 
     if (response.status === 200) {
-      return await response.json();
+      const data = await response.json();
+      return data.data || data;
     } else {
       throw new Error('송금 완료 체크 실패');
     }
@@ -236,26 +396,63 @@ export const confirmPayment = async (roomId) => {
   }
 };
 
-// 방 종료 (방장만 가능)
-export const closeRoom = async (roomId) => {
+// ==================== 신고 관련 API ====================
+
+// 분실물 신고
+export const reportLostAndFound = async (reportData) => {
   try {
     const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/close`, {
+    const response = await fetch(`${API_BASE_URL}/lost-and-found`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': token,
       },
+      body: JSON.stringify({
+        location: reportData.location,
+        description: reportData.description,
+      }),
     });
 
-    if (response.status === 200) {
-      return await response.json();
+    if (response.status === 201) {
+      const data = await response.json();
+      return data;
     } else {
-      throw new Error('방 종료 실패');
+      const error = await response.json();
+      throw new Error(error.error || '분실물 신고 실패');
     }
   } catch (error) {
-    console.error('방 종료 에러:', error);
+    console.error('분실물 신고 에러:', error);
     throw error;
   }
 };
 
+// 이용자 신고
+export const reportUser = async (reportData) => {
+  try {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/me/report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      },
+      body: JSON.stringify({
+        reported_user_id: reportData.reported_user_id,
+        reason: reportData.reason,
+        details: reportData.details || '',
+      }),
+    });
+
+    if (response.status === 201) {
+      const data = await response.json();
+      return data;
+    } else {
+      const error = await response.json();
+      throw new Error(error.error || '이용자 신고 실패');
+    }
+  } catch (error) {
+    console.error('이용자 신고 에러:', error);
+    throw error;
+  }
+};

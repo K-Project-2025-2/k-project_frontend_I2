@@ -14,7 +14,7 @@ import CreateRoomModal from '../modal/CreateRoomModal';
 import InviteCodeModal from '../modal/InviteCodeModal';
 import MemberCounter from '../components/MemberCounter';
 import LockIcon from '../components/LockIcon';
-import { joinRoom, getRoomDetail } from '../services/taxiApi';
+import { joinRoom, getRoomDetail, getRooms } from '../services/taxiApi';
 
 const TaxiScreen = ({ navigation }) => {
   const [selectedTab, setSelectedTab] = useState('taxi');
@@ -25,61 +25,14 @@ const TaxiScreen = ({ navigation }) => {
   // 각 방별 초대코드 틀린 횟수 추적 (room_id를 키로 사용)
   const [roomFailedAttempts, setRoomFailedAttempts] = useState({});
   // 참여중인 채팅방 목록 상태 (API 명세서에 맞춘 구조)
-  const [participatingRooms, setParticipatingRooms] = useState([
-    // 예시 데이터 - 실제로는 AsyncStorage나 서버에서 가져올 데이터
-    // API 필드: room_id, departure, destination, current_count, max_members, host_id
-  ]);
+  const [participatingRooms, setParticipatingRooms] = useState([]);
   
-  // 다른 사람들이 생성한 방 목록 (더미 데이터)
+  // 다른 사람들이 생성한 방 목록
   // TODO: 실제로는 서버 API에서 방 목록을 가져와야 함
-  const [availableRooms, setAvailableRooms] = useState([
-    {
-      room_id: 100,
-      departure: '기흥역3번출',
-      destination: '이공관',
-      current_count: 1,
-      max_members: 4,
-      host_id: 'host_user_001',
-      invite_code_enabled: true,
-      invite_code: '000001',
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-    },
-    {
-      room_id: 101,
-      departure: '기흥역3번출',
-      destination: '샬롬관',
-      current_count: 2,
-      max_members: 4,
-      host_id: 'host_user_002',
-      invite_code_enabled: true,
-      invite_code: '000002',
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-    },
-    {
-      room_id: 102,
-      departure: '기흥역3번출',
-      destination: '천은관',
-      current_count: 3,
-      max_members: 4,
-      host_id: 'host_user_003',
-      invite_code_enabled: true,
-      invite_code: '000003',
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-    },
-    {
-      room_id: 103,
-      departure: '기흥역3번출',
-      destination: '교육관',
-      current_count: 4,
-      max_members: 4,
-      host_id: 'host_user_004',
-      invite_code_enabled: true,
-      invite_code: '000004',
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-    },
-  ]);
-  // 방번호 관리 (104부터 시작 - 더미 데이터가 100~103까지 사용 중)
-  const [nextRoomId, setNextRoomId] = useState(104);
+  const [availableRooms, setAvailableRooms] = useState([]);
+  
+  // 방번호 관리 (백엔드에서 관리)
+  const [nextRoomId, setNextRoomId] = useState(100);
   // 현재 날짜 추적 (자정 리셋용)
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -158,26 +111,12 @@ const TaxiScreen = ({ navigation }) => {
   // 방 목록 새로고침
   const handleRefreshRooms = async () => {
     try {
-      // API 호출 비활성화 - 더미 데이터로만 진행
-      // 실제로는 getRooms() API를 호출해야 함
+      // TODO: 백엔드 API 연동 시 아래 주석 해제
       // const rooms = await getRooms();
       // setAvailableRooms(rooms);
       
-      // 더미 데이터 모드: 현재 시간으로 업데이트
-      setAvailableRooms((prev) => 
-        prev.map((room) => ({
-          ...room,
-          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        }))
-      );
-      
-      // 참여중인 채팅방도 시간 업데이트
-      setParticipatingRooms((prev) =>
-        prev.map((room) => ({
-          ...room,
-          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        }))
-      );
+      // 백엔드 API 연동 전까지는 시간을 변경하지 않음
+      // 방 생성 시 설정된 시간이 유지됨
     } catch (error) {
       console.error('방 목록 새로고침 실패:', error);
     }
@@ -222,20 +161,15 @@ const TaxiScreen = ({ navigation }) => {
         });
       }
 
-      // API 호출 비활성화 - 더미 데이터로만 진행
+      // TODO: 백엔드 API 연동 시 아래 주석 해제
+      // const updatedRoomData = await joinRoom(roomData.room_id);
+      // const updatedRoomData = await getRoomDetail(roomData.room_id);
+      
+      // 임시: 로컬 상태 업데이트 (백엔드 API 연동 전까지)
       const updatedRoomData = {
         ...roomData,
         current_count: originalCount + 1, // 참여 후 인원 수 증가
       };
-      console.log('더미 데이터로 진행:', updatedRoomData);
-      
-      // API 호출 주석 처리 (나중에 활성화)
-      // try {
-      //   const response = await joinRoom(roomData.room_id);
-      //   updatedRoomData = await getRoomDetail(roomData.room_id);
-      // } catch (apiError) {
-      //   console.log('API 호출 실패:', apiError.message);
-      // }
       
       // 모달이 닫힌 후 네비게이션 (약간의 지연을 두어 모달이 완전히 닫힌 후 이동)
       setTimeout(() => {
@@ -335,7 +269,10 @@ const TaxiScreen = ({ navigation }) => {
                 <View style={styles.roomListColumn}>
                 <View style={styles.destinationContainer}>
                   <Text style={styles.destinationText}>{room.departure || '출발지'}</Text>
-                    <Text style={styles.destinationText}>→ {room.destination || '도착지'}</Text>
+                  <View style={styles.destinationRow}>
+                    <Text style={styles.arrowText}>→</Text>
+                    <Text style={styles.destinationText}>{room.destination || '도착지'}</Text>
+                  </View>
                   </View>
                 </View>
                 <View style={styles.roomListColumn}>
@@ -384,7 +321,7 @@ const TaxiScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-          {/* 다른 사람들이 생성한 방 목록 (더미 데이터) */}
+          {/* 다른 사람들이 생성한 방 목록 */}
           {availableRooms.map((room) => {
             const currentCount = room.current_count || 0;
             const maxMembers = room.max_members || 4; // 방 생성 시 설정한 인원 수
@@ -403,9 +340,12 @@ const TaxiScreen = ({ navigation }) => {
                     <Text style={styles.roomListDestinationText}>
                       {room.departure || '출발지'}
                     </Text>
-                    <Text style={styles.roomListDestinationText}>
-                      → {room.destination || '도착지'}
-                    </Text>
+                    <View style={styles.destinationRow}>
+                      <Text style={styles.roomListArrowText}>→</Text>
+                      <Text style={styles.roomListDestinationText}>
+                        {room.destination || '도착지'}
+                      </Text>
+                    </View>
                   </View>
                 </View>
                 <View style={styles.roomListColumn}>
@@ -442,7 +382,7 @@ const TaxiScreen = ({ navigation }) => {
                       // 선택된 방 정보 저장 (초대코드 검증용)
                       setSelectedRoomForInvite(room);
                     } else {
-                      // 자유롭게 입장 (더미 데이터 모드)
+                      // 자유롭게 입장
                       const updatedRoomData = {
                         ...room,
                         current_count: (room.current_count || 0) + 1,
@@ -617,9 +557,9 @@ const styles = StyleSheet.create({
   roomItem: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 16,
+    paddingVertical: 10,
     paddingHorizontal: 15,
-    marginBottom: 5,
+    marginBottom: 3,
     alignItems: 'center',
   },
   roomNumberWithLock: {
@@ -633,7 +573,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   roomItemText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#333',
     textAlign: 'center',
   },
@@ -647,6 +587,17 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  destinationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginRight: 4,
   },
   memberCounterWrapper: {
     flexDirection: 'row',
@@ -671,7 +622,7 @@ const styles = StyleSheet.create({
   listHeader: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 15,
   },
   listHeaderText: {
@@ -705,9 +656,9 @@ const styles = StyleSheet.create({
   roomListItem: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 16,
+    paddingVertical: 10,
     paddingHorizontal: 15,
-    marginBottom: 5,
+    marginBottom: 3,
     alignItems: 'center',
   },
   roomListNumber: {
@@ -719,6 +670,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'column',
+  },
+  roomListArrowText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginRight: 4,
   },
   roomListDestinationText: {
     fontSize: 12,

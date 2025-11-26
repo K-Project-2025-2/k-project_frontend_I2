@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MemberCounter from '../components/MemberCounter';
 import SettlementModal from '../modal/SettlementModal';
-import { sendMessage, getMessages } from '../services/taxiApi';
+import { sendMessage, getMessages, startOperation, acceptOperation, getOperationStatus, endOperation } from '../services/taxiApi';
 
 // 이미지 경로 (이미지 파일을 assets/images 폴더에 추가하세요)
 // 이미지 파일이 없을 경우를 대비해 try-catch 사용
@@ -73,8 +73,9 @@ const ChatScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (!roomData?.room_id || hasShownJoinMessage.current) return;
     
-    // 사용자 이름 (임시로 더미 데이터 사용, 나중에 실제 사용자 이름으로 교체)
-    const userName = '홍길동'; // TODO: 실제 사용자 이름으로 교체
+    
+    // TODO: 실제 사용자 이름으로 교체 (백엔드 API에서 가져올 예정)
+    const userName = '홍길동';
     
     const joinMessage = {
       message_id: Date.now() - 1, // 다른 메시지보다 먼저 표시되도록
@@ -99,13 +100,12 @@ const ChatScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (!roomData?.room_id) return;
 
-    // 초기 메시지 로드 (더미 데이터 모드)
+    // 초기 메시지 로드
     const loadMessages = async () => {
-      // API 호출 비활성화 - 더미 데이터로만 진행
       // 운행 준비중 메시지는 방장이 운행시작 버튼을 눌렀을 때만 표시됨
       // (handleStartOperation에서 처리)
       
-      // API 호출 주석 처리 (나중에 활성화)
+      // TODO: 백엔드 API 연동 시 아래 주석 해제
       // try {
       //   const fetchedMessages = await getMessages(roomData.room_id);
       //   const formattedMessages = fetchedMessages.map(msg => ({
@@ -120,8 +120,7 @@ const ChatScreen = ({ navigation, route }) => {
 
     loadMessages();
 
-    // Polling 비활성화 (더미 데이터 모드)
-    // API 호출 주석 처리 (나중에 활성화)
+    // TODO: 백엔드 API 연동 시 아래 Polling 주석 해제
     // const pollingInterval = setInterval(async () => {
     //   try {
     //     const currentMessages = messagesRef.current;
@@ -143,7 +142,7 @@ const ChatScreen = ({ navigation, route }) => {
     //   }
     // }, 3000);
     
-    // 더미 데이터 모드에서는 Polling 없음
+    // 백엔드 API 연동 전까지 Polling 없음
     const pollingInterval = null;
 
     return () => {
@@ -299,8 +298,8 @@ const ChatScreen = ({ navigation, route }) => {
     // (사용자가 나갔을 때 해당 사용자의 수락 상태 제거)
     if (currentAcceptedCount > totalMembers) {
       // 참여자 수에 맞게 수락 상태 조정
-      // 실제로는 서버에서 받은 수락 상태를 사용해야 하지만,
-      // 더미 데이터 모드에서는 참여자 수에 맞게 조정
+      // TODO: 백엔드 API 연동 시 서버에서 받은 수락 상태 사용
+      // 임시: 참여자 수에 맞게 조정
       const adjustedAcceptedUsers = acceptedUsers.slice(0, Math.max(0, totalMembers - 1));
       setAcceptedUsers(adjustedAcceptedUsers);
     }
@@ -320,7 +319,7 @@ const ChatScreen = ({ navigation, route }) => {
     const tempMessage = {
       message_id: Date.now(), // 임시 ID
       room_id: roomData?.room_id,
-      sender_id: null,
+      sender_id: myUserId, // 자신의 메시지로 표시하기 위해 myUserId 설정
       sender_name: '나',
       message: messageText,
       created_at: new Date().toISOString(),
@@ -328,10 +327,8 @@ const ChatScreen = ({ navigation, route }) => {
     };
     setMessages(prev => [...prev, tempMessage]);
 
-    // API 호출 비활성화 - 더미 데이터로만 진행
+    // TODO: 백엔드 API 연동 시 아래 주석 해제
     // 메시지는 이미 로컬에 추가되었으므로 그대로 유지
-    
-    // API 호출 주석 처리 (나중에 활성화)
     // try {
     //   const response = await sendMessage(roomData.room_id, messageText);
     //   const serverMessage = {
@@ -347,10 +344,36 @@ const ChatScreen = ({ navigation, route }) => {
     // }
   };
 
+  // 계좌 요청 핸들러
+  const handleRequestAccount = () => {
+    // TODO: 실제 사용자 이름으로 교체 (백엔드 API에서 가져올 예정)
+    // 현재는 roomData에서 사용자 이름을 가져오거나 임시로 사용
+    const userName = roomData?.members?.find(m => m.user_id === myUserId)?.name 
+      || roomData?.current_members?.find(m => m.user_id === myUserId)?.name 
+      || '홍길동'; // 임시
+    
+    const accountRequestMessage = {
+      message_id: Date.now(),
+      room_id: roomData?.room_id,
+      sender_id: null,
+      sender_name: '시스템',
+      message: `${userName}님이 계좌를 요청하였습니다.`,
+      created_at: new Date().toISOString(),
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages(prev => [...prev, accountRequestMessage]);
+    
+    // TODO: 백엔드 API 연동 시 아래 주석 해제
+    // try {
+    //   await sendMessage(roomData.room_id, `${userName}님이 계좌를 요청하였습니다.`);
+    // } catch (error) {
+    //   console.log('계좌 요청 메시지 전송 실패:', error);
+    // }
+  };
+
   // 방 정보 표시용 (API 명세서에 맞춘 필드)
-  const displayDestination = roomData?.departure && roomData?.destination 
-    ? `${roomData.departure} → ${roomData.destination}`
-    : '기흥역 → 이공관';
+  const departureText = roomData?.departure || '기흥역';
+  const destinationText = roomData?.destination || '이공관';
   const currentCount = roomData?.current_count || 1;
   const maxMembers = roomData?.max_members || 4; // 방 생성 시 설정한 인원수 사용
   const inviteCodeEnabled = roomData?.invite_code_enabled;
@@ -623,10 +646,14 @@ const ChatScreen = ({ navigation, route }) => {
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <Text style={styles.headerRoute}>{displayDestination}</Text>
-            <View style={styles.memberCounterContainer}>
-              <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={16} />
+            <View style={styles.headerRouteContainer}>
+              <Text style={styles.headerRoute}>{departureText}</Text>
+              <Text style={styles.headerArrow}>→</Text>
+              <Text style={styles.headerRoute}>{destinationText}</Text>
             </View>
+          </View>
+          <View style={styles.headerMemberInfo}>
+            <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={16} />
           </View>
           <View style={styles.headerInviteCode}>
             <Text style={styles.inviteCodeTitle}>초대코드</Text>
@@ -771,11 +798,28 @@ const ChatScreen = ({ navigation, route }) => {
             }
             
             // 일반 메시지
+            // 자신의 메시지인지 확인 (sender_id가 null이거나 시스템 메시지인 경우 제외)
+            const isMyMessage = msg.sender_id !== null && msg.sender_id === myUserId;
+            
             return (
-            <View key={msg.message_id} style={styles.messageBubble}>
-              <Text style={styles.messageSender}>{msg.sender_name || '나'}</Text>
-              <Text style={styles.messageText}>{msg.message}</Text>
-              <Text style={styles.messageTime}>{msg.time}</Text>
+            <View 
+              key={msg.message_id} 
+              style={[
+                styles.messageBubble,
+                isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
+              ]}
+            >
+              {!isMyMessage && (
+                <Text style={styles.messageSender}>{msg.sender_name || '알 수 없음'}</Text>
+              )}
+              <Text style={[
+                styles.messageText,
+                isMyMessage ? styles.myMessageText : styles.otherMessageText
+              ]}>{msg.message}</Text>
+              <Text style={[
+                styles.messageTime,
+                isMyMessage ? styles.myMessageTime : styles.otherMessageTime
+              ]}>{msg.time}</Text>
             </View>
             );
           })}
@@ -884,11 +928,17 @@ const ChatScreen = ({ navigation, route }) => {
             <View style={styles.actionButtonEmpty} />
             
             {/* 세 번째 행: 계좌 요청 | 신고 | 채팅방 나가기 */}
-              <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>계좌 요청</Text>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={handleRequestAccount}
+              >
+                <Text style={styles.actionButtonText}>계좌 요청</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>신고</Text>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('Report', { roomData })}
+              >
+                <Text style={styles.actionButtonText}>신고</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={handleLeaveRoom}>
                 <Text style={styles.actionButtonText}>채팅방 나가기</Text>
@@ -929,7 +979,7 @@ const styles = StyleSheet.create({
     height: 64,
   },
   backButton: {
-    width: 44,
+    width: 40,
     height: 44,
     borderRadius: 8,
     backgroundColor: '#E3F2FD',
@@ -937,7 +987,7 @@ const styles = StyleSheet.create({
     borderColor: '#4A90E2',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
   },
   backButtonText: {
     fontSize: 20,
@@ -946,24 +996,53 @@ const styles = StyleSheet.create({
   headerInfo: {
     flex: 1,
     backgroundColor: '#E3F2FD',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 6,
-    marginRight: 10,
+    marginRight: 8,
     borderWidth: 1,
     borderColor: '#4A90E2',
     height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerMemberInfo: {
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRouteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   headerRoute: {
     fontSize: 14,
     color: '#0D47A1',
     fontWeight: '500',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  headerArrow: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0D47A1',
+    marginHorizontal: 8,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    lineHeight: 20,
   },
   memberCounterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'center',
   },
   headerMembersText: {
     fontSize: 12,
@@ -971,7 +1050,7 @@ const styles = StyleSheet.create({
   },
   headerInviteCode: {
     backgroundColor: '#E3F2FD',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 6,
     borderWidth: 1,
@@ -1009,12 +1088,22 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   messageBubble: {
-    backgroundColor: '#E0E0E0',
     padding: 12,
     borderRadius: 8,
     marginBottom: 10,
-    alignSelf: 'flex-end',
     maxWidth: '80%',
+  },
+  // 자신의 메시지 (오른쪽 정렬, 파란색)
+  myMessageBubble: {
+    backgroundColor: '#4A90E2',
+    alignSelf: 'flex-end',
+    borderTopRightRadius: 0,
+  },
+  // 다른 사람의 메시지 (왼쪽 정렬, 회색)
+  otherMessageBubble: {
+    backgroundColor: '#E0E0E0',
+    alignSelf: 'flex-start',
+    borderTopLeftRadius: 0,
   },
   messageSender: {
     fontSize: 12,
@@ -1024,13 +1113,27 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 14,
-    color: '#333',
     marginBottom: 4,
+  },
+  // 자신의 메시지 텍스트 (흰색)
+  myMessageText: {
+    color: '#FFFFFF',
+  },
+  // 다른 사람의 메시지 텍스트 (검정색)
+  otherMessageText: {
+    color: '#333',
   },
   messageTime: {
     fontSize: 10,
-    color: '#666',
     alignSelf: 'flex-end',
+  },
+  // 자신의 메시지 시간 (연한 흰색)
+  myMessageTime: {
+    color: '#E0E0E0',
+  },
+  // 다른 사람의 메시지 시간 (회색)
+  otherMessageTime: {
+    color: '#666',
   },
   // 입장 메시지 스타일 (가운데 정렬)
   joinMessageBubble: {

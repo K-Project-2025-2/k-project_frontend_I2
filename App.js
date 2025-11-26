@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import TaxiScreen from './screen/TaxiScreen';
 import ChatScreen from './screen/ChatScreen';
+import ReportScreen from './screen/ReportScreen';
 
 // Stack Navigator 생성
 const Stack = createStackNavigator();
@@ -25,6 +26,11 @@ const App = () => {
         <Stack.Screen 
           name="Chat" 
           component={ChatScreen} 
+        />
+        {/* 신고 화면 (ReportScreen) */}
+        <Stack.Screen 
+          name="Report" 
+          component={ReportScreen} 
         />
       </Stack.Navigator>
     </NavigationContainer>
