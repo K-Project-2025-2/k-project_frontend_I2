@@ -49,6 +49,7 @@ function MainTabNavigator() {
         component={TaxiScreen}
         options={{
           title: '택시',
+          headerShown: false,
           tabBarIcon: () => null,
         }}
       />
@@ -158,4 +159,3 @@ export default function App() {
     </NavigationContainer>
   );
 }
-

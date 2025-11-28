@@ -213,6 +213,10 @@ const TaxiScreen = ({ navigation }) => {
     navigateToChat(roomData, false);
   };
 
+  const goToMyPage = () => {
+    navigation.jumpTo('MyPage');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
@@ -222,7 +226,7 @@ const TaxiScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.headerButton}>
           <Text style={styles.headerButtonText}>Kangnam Taxi</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerButton}>
+        <TouchableOpacity style={styles.headerButton} onPress={goToMyPage}>
           <Text style={styles.headerButtonText}>프로필</Text>
         </TouchableOpacity>
       </View>
@@ -459,25 +463,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingTop: (StatusBar.currentHeight || 0) + 10,
+    paddingBottom: 10,
+    backgroundColor: '#f5f5f5',
   },
   headerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#4A90E2',
+    padding: 8,
   },
   headerButtonText: {
-    color: '#0D47A1',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: '#4A90E2',
   },
   content: {
     flex: 1,
