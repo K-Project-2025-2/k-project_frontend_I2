@@ -17,7 +17,6 @@ import LockIcon from '../components/LockIcon';
 import { joinRoom, getRoomDetail, getRooms } from '../services/taxiApi';
 
 const TaxiScreen = ({ navigation }) => {
-  const [selectedTab, setSelectedTab] = useState('taxi');
   const [createRoomModalVisible, setCreateRoomModalVisible] = useState(false);
   const [inviteCodeModalVisible, setInviteCodeModalVisible] = useState(false);
   // 초대코드로 입장하려는 방 정보
@@ -424,41 +423,6 @@ const TaxiScreen = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      {/* 하단 네비게이션 */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity 
-          style={[styles.navButton, selectedTab === 'home' && styles.navButtonActive]}
-          onPress={() => {
-            setSelectedTab('home');
-            // 나중에 메인 화면과 합칠 예정
-          }}
-        >
-          <Text style={[styles.navButtonText, selectedTab === 'home' && styles.navButtonTextActive]}>
-            홈
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.navButton, selectedTab === 'taxi' && styles.navButtonActive]}
-          onPress={() => setSelectedTab('taxi')}
-        >
-          <Text style={[styles.navButtonText, selectedTab === 'taxi' && styles.navButtonTextActive]}>
-            택시
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.navButton, selectedTab === 'mypage' && styles.navButtonActive]}
-          onPress={() => {
-            setSelectedTab('mypage');
-            // TODO: 마이페이지 화면 구현 후 navigation.navigate('MyPage') 추가
-            // navigation.navigate('MyPage');
-          }}
-        >
-          <Text style={[styles.navButtonText, selectedTab === 'mypage' && styles.navButtonTextActive]}>
-            마이페이지
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       {/* 방 생성 모달 */}
       <CreateRoomModal
         visible={createRoomModalVisible}
@@ -713,32 +677,6 @@ const styles = StyleSheet.create({
   },
   roomListEnterButtonTextDisabled: {
     color: '#666',
-  },
-  // 하단 네비게이션
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    paddingVertical: 10,
-  },
-  navButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginHorizontal: 5,
-  },
-  navButtonActive: {
-    backgroundColor: '#4A90E2',
-  },
-  navButtonText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  navButtonTextActive: {
-    color: 'white',
   },
 });
 
