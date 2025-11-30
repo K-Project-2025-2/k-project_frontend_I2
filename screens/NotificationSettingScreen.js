@@ -1,73 +1,121 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   TouchableOpacity,
+  Switch,
   Alert,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 
-const AccountRegisterScreen = ({navigation, route}) => {
-  const [selectedBank, setSelectedBank] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const handleSave = () => {
-  if (!selectedBank || !accountNumber) {
-    Alert.alert('입력 오류', '은행과 계좌번호를 모두 입력해주세요.');
-    return;
-  }
+const NotificationSettingScreen = ({ navigation }) => {
 
-  Alert.alert('등록 완료', `${selectedBank} 계좌(${accountNumber})가 등록되었습니다.`);
+  const [isPushEnabled, setIsPushEnabled] = useState(true);
+  const [isMarketingEnabled, setIsMarketingEnabled] = useState(false);
+  const [isEmailEnabled, setIsEmailEnabled] = useState(true);
+  const [isVibrationEnabled, setIsVibrationEnabled] = useState(true);
 
-  navigation.navigate("MyPage", {
-    bank: selectedBank,
-    accountNumber: accountNumber
-  });
-};
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
+  const loadSettings = async () => {
+    try {
+      const savedPush = await AsyncStorage.getItem('isPushEnabled');
+      const savedMarketing = await AsyncStorage.getItem('isMarketingEnabled');
+      const savedEmail = await AsyncStorage.getItem('isEmailEnabled');
+      const savedVibration = await AsyncStorage.getItem('isVibrationEnabled');
+
+      if (savedPush !== null) setIsPushEnabled(JSON.parse(savedPush));
+      if (savedMarketing !== null) setIsMarketingEnabled(JSON.parse(savedMarketing));
+      if (savedEmail !== null) setIsEmailEnabled(JSON.parse(savedEmail));
+      if (savedVibration !== null) setIsVibrationEnabled(JSON.parse(savedVibration));
+    } catch (e) {
+      console.error("불러오기 실패", e);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      await AsyncStorage.setItem('isPushEnabled', JSON.stringify(isPushEnabled));
+      await AsyncStorage.setItem('isMarketingEnabled', JSON.stringify(isMarketingEnabled));
+      await AsyncStorage.setItem('isEmailEnabled', JSON.stringify(isEmailEnabled));
+      await AsyncStorage.setItem('isVibrationEnabled', JSON.stringify(isVibrationEnabled));
+
+      Alert.alert('설정 저장', '알림 설정이 기기에 저장되었습니다.', [
+        {
+          text: '확인',
+          onPress: () => navigation.goBack(),
+        },
+      ]);
+    } catch (e) {
+      Alert.alert('오류', '저장에 실패했습니다.');
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>계좌 등록</Text>
+      <Text style={styles.title}>알림 설정</Text>
 
+      {/* 앱 푸시 알림 */}
+      <View style={styles.settingItem}>
+        <Text style={styles.label}>앱 푸시 알림</Text>
+        <Switch
+          trackColor={{ false: '#767577', true: '#81b0ff' }}
+          thumbColor={isPushEnabled ? '#007AFF' : '#f4f3f4'}
+          onValueChange={setIsPushEnabled}
+          value={isPushEnabled}
+        />
+      </View>
+      <View style={styles.divider} />
 
-      <Text style={styles.label}>은행 선택</Text>
-      <View style={styles.pickerWrapper}>
-        <Picker
-          selectedValue={selectedBank}
-          onValueChange={(value) => setSelectedBank(value)}
-        >
-          <Picker.Item label="은행을 선택하세요" value="" />
-          <Picker.Item label="국민은행" value="국민은행" />
-          <Picker.Item label="신한은행" value="신한은행" />
-          <Picker.Item label="우리은행" value="우리은행" />
-          <Picker.Item label="하나은행" value="하나은행" />
-          <Picker.Item label="카카오뱅크" value="카카오뱅크" />
-          <Picker.Item label="토스뱅크" value="토스뱅크" />
-        </Picker>
+      {/* 마케팅 정보 */}
+      <View style={styles.settingItem}>
+        <Text style={styles.label}>마케팅 정보 수신</Text>
+        <Switch
+          trackColor={{ false: '#767577', true: '#81b0ff' }}
+          thumbColor={isMarketingEnabled ? '#007AFF' : '#f4f3f4'}
+          onValueChange={setIsMarketingEnabled}
+          value={isMarketingEnabled}
+        />
+      </View>
+      <View style={styles.divider} />
+
+      {/* 이메일 알림 */}
+      <View style={styles.settingItem}>
+        <Text style={styles.label}>이메일 알림</Text>
+        <Switch
+          trackColor={{ false: '#767577', true: '#81b0ff' }}
+          thumbColor={isEmailEnabled ? '#007AFF' : '#f4f3f4'}
+          onValueChange={setIsEmailEnabled}
+          value={isEmailEnabled}
+        />
+      </View>
+      <View style={styles.divider} />
+
+      {/* 진동 알림 */}
+      <View style={styles.settingItem}>
+        <Text style={styles.label}>진동 알림</Text>
+        <Switch
+          trackColor={{ false: '#767577', true: '#81b0ff' }}
+          thumbColor={isVibrationEnabled ? '#007AFF' : '#f4f3f4'}
+          onValueChange={setIsVibrationEnabled}
+          value={isVibrationEnabled}
+        />
       </View>
 
-
-      <Text style={styles.label}>계좌번호</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="계좌번호를 입력하세요"
-        keyboardType="numeric"
-        value={accountNumber}
-        onChangeText={setAccountNumber}
-      />
-
+      <View style={styles.spacer} />
 
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-        <Text style={styles.saveButtonText}>등록하기</Text>
+        <Text style={styles.saveButtonText}>설정 저장하기</Text>
       </TouchableOpacity>
     </View>
   );
 };
 
-export default AccountRegisterScreen;
+export default NotificationSettingScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -78,30 +126,32 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 25,
+    marginBottom: 30,
+    marginTop: 10,
+  },
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
   },
   label: {
-    fontSize: 16,
-    marginBottom: 8,
+    fontSize: 17,
     fontWeight: '500',
+    color: '#333',
   },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#CCC',
-    borderRadius: 10,
-    marginBottom: 15,
+  divider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#CCC',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 20,
+  spacer: {
+    flex: 1,
   },
   saveButton: {
     backgroundColor: '#007AFF',
     paddingVertical: 15,
     borderRadius: 10,
+    marginBottom: 20,
   },
   saveButtonText: {
     color: '#FFF',
