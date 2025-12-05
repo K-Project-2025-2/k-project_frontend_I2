@@ -8,6 +8,9 @@ export const API_BASE_URL = 'http://3.36.32.57:8080';
 const TOKEN_KEY = '@auth_token';
 const USERNAME_KEY = '@username';
 const USER_ID_KEY = '@user_id';
+const ACCOUNT_BANK_KEY = '@account_bank';
+const ACCOUNT_NUMBER_KEY = '@account_number';
+const PARTICIPATING_ROOMS_KEY = '@participating_rooms';
 
 // 인증 토큰 가져오기
 export const getAuthToken = async () => {
@@ -96,6 +99,73 @@ export const removeUserId = async () => {
     await AsyncStorage.removeItem(USER_ID_KEY);
   } catch (error) {
     console.error('사용자 ID 삭제 에러:', error);
+  }
+};
+
+// 계좌 정보 저장
+export const saveAccountInfo = async (bank, accountNumber) => {
+  try {
+    await AsyncStorage.setItem(ACCOUNT_BANK_KEY, bank || '');
+    await AsyncStorage.setItem(ACCOUNT_NUMBER_KEY, accountNumber || '');
+  } catch (error) {
+    console.error('계좌 정보 저장 에러:', error);
+  }
+};
+
+// 계좌 정보 가져오기
+export const getAccountInfo = async () => {
+  try {
+    const bank = await AsyncStorage.getItem(ACCOUNT_BANK_KEY);
+    const accountNumber = await AsyncStorage.getItem(ACCOUNT_NUMBER_KEY);
+    return {
+      bank: bank || '',
+      accountNumber: accountNumber || '',
+    };
+  } catch (error) {
+    console.error('계좌 정보 가져오기 에러:', error);
+    return { bank: '', accountNumber: '' };
+  }
+};
+
+// 계좌 정보 삭제
+export const removeAccountInfo = async () => {
+  try {
+    await AsyncStorage.removeItem(ACCOUNT_BANK_KEY);
+    await AsyncStorage.removeItem(ACCOUNT_NUMBER_KEY);
+  } catch (error) {
+    console.error('계좌 정보 삭제 에러:', error);
+  }
+};
+
+// 참여중인 채팅방 목록 저장
+export const saveParticipatingRooms = async (rooms) => {
+  try {
+    await AsyncStorage.setItem(PARTICIPATING_ROOMS_KEY, JSON.stringify(rooms));
+  } catch (error) {
+    console.error('참여중인 채팅방 목록 저장 에러:', error);
+  }
+};
+
+// 참여중인 채팅방 목록 가져오기
+export const getParticipatingRooms = async () => {
+  try {
+    const roomsJson = await AsyncStorage.getItem(PARTICIPATING_ROOMS_KEY);
+    if (roomsJson) {
+      return JSON.parse(roomsJson);
+    }
+    return [];
+  } catch (error) {
+    console.error('참여중인 채팅방 목록 가져오기 에러:', error);
+    return [];
+  }
+};
+
+// 참여중인 채팅방 목록 삭제
+export const removeParticipatingRooms = async () => {
+  try {
+    await AsyncStorage.removeItem(PARTICIPATING_ROOMS_KEY);
+  } catch (error) {
+    console.error('참여중인 채팅방 목록 삭제 에러:', error);
   }
 };
 

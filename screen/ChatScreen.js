@@ -21,7 +21,8 @@ import MemberCounter from '../components/MemberCounter';
 import SettlementModal from '../modal/SettlementModal';
 import { sendMessage, getMessages, startOperation, acceptOperation, getOperationStatus, endOperation, leaveRoom, createSplit, getSplit, confirmPayment } from '../services/taxiApi';
 import { getDepositStatus } from '../services/depositApi';
-import { getUsername, getUserId } from '../services/apiConfig';
+import { getUsername, getUserId, saveUserId, getAccountInfo } from '../services/apiConfig';
+import { getMyProfile } from '../services/myPageApi';
 
 // 이미지 경로 (이미지 파일을 assets/images 폴더에 추가하세요)
 // 이미지 파일이 없을 경우를 대비해 try-catch 사용
@@ -44,8 +45,12 @@ const ChatScreen = ({ navigation, route }) => {
   const { roomData, onLeaveRoom, onAddToParticipatingRooms, isFromCreate } = route.params || {};
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
-  // 액션 버튼 그리드 표시 여부 상태
-  const [showActionButtons, setShowActionButtons] = useState(true);
+  // 액션 버튼 그리드 표시 여부 상태 (초기값 false - 채팅방 입장 시 숨김)
+  const [showActionButtons, setShowActionButtons] = useState(false);
+  // 키보드 높이 상태
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // 키보드 높이 저장 (플러스 메뉴를 위해 유지)
+  const savedKeyboardHeight = useRef(300); // 기본값 300
   // 정산 모달 표시 여부
   const [settlementModalVisible, setSettlementModalVisible] = useState(false);
   // 운행 시작 여부 (방장이 운행시작 버튼을 눌렀는지 여부)
@@ -70,6 +75,32 @@ const ChatScreen = ({ navigation, route }) => {
   
   // 입장 메시지 표시 여부 추적 (한 번만 표시)
   const hasShownJoinMessage = useRef(false);
+  
+  // 키보드 이벤트 리스너
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        const height = e.endCoordinates.height;
+        setKeyboardHeight(height);
+        savedKeyboardHeight.current = height; // 키보드 높이 저장
+        // 키보드가 올라오면 플러스 메뉴 닫기
+        setShowActionButtons(false);
+      }
+    );
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        // 키보드가 닫혀도 높이는 유지 (플러스 메뉴를 위해)
+        // setKeyboardHeight는 유지하되, savedKeyboardHeight는 그대로 유지
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
   
   // 채팅방 입장 시 입장 메시지 추가 및 이미 수락한 인원 수 초기화 (한 번만)
   useEffect(() => {
@@ -138,6 +169,32 @@ const ChatScreen = ({ navigation, route }) => {
             };
           });
           setMessages(formattedMessages);
+        } else {
+          // 데모 데이터인 경우 더미 메시지 추가
+          const isDemoRoom = roomData?.roomCode && roomData.roomCode.startsWith('100');
+          if (isDemoRoom) {
+            const demoMessages = [
+              {
+                message_id: Date.now() - 300000,
+                room_id: roomData.room_id,
+                sender_id: String(roomData.host_id || 999),
+                sender_name: '방장',
+                message: '안녕하세요! 택시 합승하실 분 모집합니다.',
+                created_at: new Date(Date.now() - 300000).toISOString(),
+                time: new Date(Date.now() - 300000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+              },
+              {
+                message_id: Date.now() - 200000,
+                room_id: roomData.room_id,
+                sender_id: String((roomData.host_id || 999) + 1),
+                sender_name: '참여자1',
+                message: '저도 참여하고 싶어요!',
+                created_at: new Date(Date.now() - 200000).toISOString(),
+                time: new Date(Date.now() - 200000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+              },
+            ];
+            setMessages(demoMessages);
+          }
         }
       } catch (error) {
         console.log('메시지 조회 실패:', error.message);
@@ -147,7 +204,10 @@ const ChatScreen = ({ navigation, route }) => {
     loadMessages();
 
     // 메시지 Polling (3초마다 새 메시지 확인)
-    const messagePollingInterval = setInterval(async () => {
+    const isDemoRoom = roomData?.roomCode && roomData.roomCode.startsWith('100');
+    
+    // 데모 방이 아닌 경우에만 Polling 실행
+    const messagePollingInterval = isDemoRoom ? null : setInterval(async () => {
       try {
         const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
         const currentMessages = messagesRef.current;
@@ -204,7 +264,9 @@ const ChatScreen = ({ navigation, route }) => {
     }, 3000); // 3초마다 확인
 
     return () => {
-      clearInterval(messagePollingInterval);
+      if (messagePollingInterval) {
+        clearInterval(messagePollingInterval);
+      }
     };
   }, [roomData?.room_id, roomData?.roomCode, isFromCreate]);
 
@@ -335,11 +397,11 @@ const ChatScreen = ({ navigation, route }) => {
   
   // 현재 사용자가 방장인지 확인
   // isFromCreate가 true이면 방장이 생성한 방
-  // 또는 roomData의 host_id와 현재 사용자 ID를 비교
-  const currentUserId = null; // TODO: 실제 사용자 ID로 교체 (로그인한 사용자 ID)
+  // 또는 roomData의 leaderId와 현재 사용자 ID를 비교
+  // myUserId는 useEffect에서 설정됨
   
-  // 방장 판단: isFromCreate가 true이거나, host_id가 현재 사용자 ID와 일치하는 경우
-  const isHost = isFromCreate === true || (roomData?.host_id === currentUserId && currentUserId !== null);
+  // 방장 판단: isFromCreate가 true이거나, leaderId가 현재 사용자 ID와 일치하는 경우
+  const isHost = isFromCreate === true || (roomData?.leaderId && myUserId && String(roomData.leaderId) === String(myUserId));
   
   // 디버깅용 로그 (개발 중에만 사용)
   useEffect(() => {
@@ -356,8 +418,24 @@ const ChatScreen = ({ navigation, route }) => {
   useEffect(() => {
     const initUserId = async () => {
       try {
-        // 로그인 시 저장된 실제 사용자 ID 가져오기
-        const userId = await getUserId();
+        // 먼저 AsyncStorage에서 사용자 ID 가져오기
+        let userId = await getUserId();
+        
+        // AsyncStorage에 사용자 ID가 없으면 프로필 조회를 통해 가져오기
+        if (!userId) {
+          try {
+            const profile = await getMyProfile();
+            if (profile && (profile.id || profile.user_id || profile.userId)) {
+              userId = String(profile.id || profile.user_id || profile.userId);
+              // AsyncStorage에 저장
+              await saveUserId(userId);
+              console.log('프로필 조회를 통해 사용자 ID 가져옴:', userId);
+            }
+          } catch (profileError) {
+            console.log('프로필 조회 실패 (사용자 ID 가져오기 실패):', profileError.message);
+          }
+        }
+        
         if (userId) {
           const userIdString = String(userId);
           setMyUserId(userIdString); // 문자열로 변환하여 저장
@@ -450,6 +528,7 @@ const ChatScreen = ({ navigation, route }) => {
 
     // 회원가입 시 받은 이름 가져오기
     const userName = await getUsername() || '나';
+    const isDemoRoom = roomData?.roomCode && roomData.roomCode.startsWith('100');
 
     // 로컬에 즉시 표시 (낙관적 업데이트)
     const tempMessage = {
@@ -462,6 +541,11 @@ const ChatScreen = ({ navigation, route }) => {
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages(prev => [...prev, tempMessage]);
+
+    // 데모 방인 경우 API 호출 없이 로컬에서만 처리
+    if (isDemoRoom) {
+      return;
+    }
 
     // 백엔드 API 연동
     try {
@@ -869,6 +953,12 @@ const ChatScreen = ({ navigation, route }) => {
       return;
     }
 
+    // 운행 시작 후 나가기 불가 (방장 제외)
+    if (isOperationStarted && !isHost) {
+      Alert.alert('알림', '운행이 시작되어 나갈 수 없습니다.');
+      return;
+    }
+
     // 운행 수락 후 정산 완료 후 송금 완료 전까지 나가기 불가
     // (운행 수락한 이용자만 제한, 방장은 제한 없음)
     
@@ -930,11 +1020,28 @@ const ChatScreen = ({ navigation, route }) => {
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <View style={styles.headerRouteContainer}>
-              <Text style={styles.headerRoute}>{departureText}</Text>
+            <TouchableOpacity 
+              style={styles.headerRouteContainer}
+              onPress={() => {
+                Alert.alert('경로 정보', `${departureText} → ${destinationText}`);
+              }}
+            >
+              <Text 
+                style={styles.headerRoute}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {departureText}
+              </Text>
               <Text style={styles.headerArrow}>→</Text>
-              <Text style={styles.headerRoute}>{destinationText}</Text>
-            </View>
+              <Text 
+                style={styles.headerRoute}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {destinationText}
+              </Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.headerMemberInfo}>
             <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={16} />
@@ -944,12 +1051,24 @@ const ChatScreen = ({ navigation, route }) => {
             <Text style={styles.inviteCodeText}>{displayInviteCode}</Text>
           </View>
         </View>
+        
+        {/* 운행 시작 버튼 (방장에게만 표시) */}
+        {isHost && !isOperationStarted && (
+          <View style={styles.operationStartHeader}>
+            <TouchableOpacity 
+              style={styles.operationStartButton}
+              onPress={handleStartOperation}
+            >
+              <Text style={styles.operationStartButtonText}>운행 시작</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
       <KeyboardAvoidingView
         style={styles.inner}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        enabled={!showActionButtons}
+        enabled={true}
       >
         {/* 채팅 메시지 영역 */}
         <ScrollView 
@@ -1095,12 +1214,6 @@ const ChatScreen = ({ navigation, route }) => {
                       )}
                       <Text style={styles.settlementActionButtonText}>카카오페이 송금</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.settlementActionButton}
-                      onPress={handleRequestAccount}
-                    >
-                      <Text style={styles.settlementActionButtonText}>계좌 요청하기</Text>
-                    </TouchableOpacity>
                   </View>
                   
                   {/* 송금 완료 현황 */}
@@ -1164,13 +1277,15 @@ const ChatScreen = ({ navigation, route }) => {
                 ]}>
                   {msg.message}
                 </Text>
-                <Text style={[
-                  styles.messageTime,
-                  isMyMessage ? styles.myMessageTime : styles.otherMessageTime
-                ]}>
-                  {msg.time}
-                </Text>
               </View>
+              {/* 시간 (버블 밖에 표시) */}
+              <Text style={[
+                styles.messageTime,
+                isMyMessage ? styles.myMessageTime : styles.otherMessageTime,
+                { alignSelf: isMyMessage ? 'flex-end' : 'flex-start' }
+              ]}>
+                {msg.time}
+              </Text>
             </View>
             );
           })}
@@ -1181,41 +1296,56 @@ const ChatScreen = ({ navigation, route }) => {
               <TouchableOpacity 
                 style={styles.closeButton}
                 onPress={() => {
-              // 키보드 닫기
-                  Keyboard.dismiss();
-              // 액션 그리드 토글
-              setShowActionButtons(!showActionButtons);
+                  // 액션 그리드 토글
+                  const newShowState = !showActionButtons;
+                  setShowActionButtons(newShowState);
+                  
+                  if (newShowState) {
+                    // 플러스 버튼을 눌렀을 때 저장된 키보드 높이 사용
+                    if (keyboardHeight === 0) {
+                      // 키보드가 닫혀있으면 저장된 높이 또는 기본값 사용
+                      setKeyboardHeight(savedKeyboardHeight.current || 300);
+                    }
+                    // 키보드 닫기
+                    Keyboard.dismiss();
+                  } else {
+                    // 플러스 버튼을 닫을 때는 키보드 높이 유지
+                    Keyboard.dismiss();
+                  }
                 }}
               >
             <Text style={styles.closeButtonText}>{showActionButtons ? '✕' : '+'}</Text>
               </TouchableOpacity>
               <TextInput
-            ref={textInputRef}
+                ref={textInputRef}
                 style={styles.inputField}
-                placeholder="(채팅을 입력하세요)"
+                placeholder="채팅을 입력하세요"
                 value={message}
                 onChangeText={setMessage}
                 multiline
-            editable={true}
-            autoFocus={false}
-            onFocus={() => {
-              // 채팅 입력 필드 포커스 시 액션 그리드 숨기기
-              setShowActionButtons(false);
-            }}
-            onPressIn={() => {
-              // 터치 시 확실히 포커스 받기
-              setShowActionButtons(false);
-              // 포커스 강제
-              if (textInputRef.current) {
-                textInputRef.current.focus();
-              }
-            }}
-            onTouchStart={() => {
-              // 터치 시작 시 포커스
-              if (textInputRef.current) {
-                textInputRef.current.focus();
-              }
-            }}
+                editable={true}
+                autoFocus={false}
+                keyboardType="default"
+                returnKeyType="default"
+                blurOnSubmit={false}
+                onFocus={() => {
+                  // 채팅 입력 필드 포커스 시 액션 그리드 숨기기
+                  setShowActionButtons(false);
+                }}
+                onPressIn={() => {
+                  // 터치 시 확실히 포커스 받기
+                  setShowActionButtons(false);
+                  // 포커스 강제
+                  if (textInputRef.current) {
+                    textInputRef.current.focus();
+                  }
+                }}
+                onTouchStart={() => {
+                  // 터치 시작 시 포커스
+                  if (textInputRef.current) {
+                    textInputRef.current.focus();
+                  }
+                }}
               />
               <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
                 <Text style={styles.sendButtonText}>전송</Text>
@@ -1224,230 +1354,87 @@ const ChatScreen = ({ navigation, route }) => {
 
             {/* 액션 버튼 그리드 */}
         {showActionButtons && (
-            <View style={styles.actionButtonsGrid}>
-            {/* 첫 번째 행: 토스 송금 | 운행 시작/종료 | 정산 */}
-            {(() => {
-              const settlementMessage = messages.find(msg => msg.type === 'settlement');
-              const shouldDisable = isHost && settlementMessage;
-              console.log('토스 송금 버튼 - isHost:', isHost, 'settlementMessage:', !!settlementMessage, 'shouldDisable:', shouldDisable);
-              
-              return (
+            <ScrollView 
+              style={[styles.actionButtonsGrid, { 
+                maxHeight: keyboardHeight > 0 ? keyboardHeight : (savedKeyboardHeight?.current || 300),
+              }]}
+              contentContainerStyle={styles.actionButtonsContent}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+            >
+            {/* 첫 번째 행: 정산하기 (방장만, 운행 시작 후) */}
+              {isHost && isOperationStarted && (
                 <TouchableOpacity 
-                  style={[
-                    styles.actionButton,
-                    shouldDisable ? styles.actionButtonDisabled : null
-                  ]}
+                  style={styles.actionButton}
                   onPress={() => {
-                    if (shouldDisable) {
-                      Alert.alert('알림', '방장은 토스 송금을 사용할 수 없습니다.');
+                    const hasOperationStarted = messages.some(msg => 
+                      msg.type === 'operation_started' || 
+                      (msg.type === 'operation_start' && msg.message === '운행이 시작되었습니다.')
+                    );
+                    if (!hasOperationStarted) {
+                      Alert.alert('알림', '운행을 시작해야 작동됩니다.');
                       return;
                     }
-                    openTossApp();
+                    setSettlementModalVisible(true);
                   }}
-                  disabled={shouldDisable}
                 >
-                  {tossLogo && (
-                    <Image 
-                      source={tossLogo} 
-                      style={styles.actionButtonImage}
-                      resizeMode="contain"
-                    />
-                  )}
-                  <Text style={[
-                    styles.actionButtonText,
-                    shouldDisable ? styles.actionButtonTextDisabled : null
-                  ]}>토스 송금</Text>
+                  <Text style={styles.actionButtonText}>정산하기</Text>
                 </TouchableOpacity>
-              );
-            })()}
-            <TouchableOpacity 
-              style={[
-                styles.actionButton,
-                !isHost && styles.actionButtonDisabled,
-              ]}
-              onPress={handleStartOperation}
-              disabled={!isHost}
-            >
-              <Text style={[
-                styles.actionButtonText,
-                !isHost && styles.actionButtonTextDisabled,
-              ]}>
-                {isDeparted ? '출발 완료' : (isAllAccepted ? '출발' : (isOperationStarted ? '운행 시작' : '운행 시작'))}
-              </Text>
-              </TouchableOpacity>
-            <TouchableOpacity 
-              style={[
-                styles.actionButton,
-                (() => {
-                  const hasOperationStarted = messages.some(msg => 
-                    msg.type === 'operation_started' || 
-                    (msg.type === 'operation_start' && msg.message === '운행이 시작되었습니다.')
-                  );
-                  return !hasOperationStarted ? styles.actionButtonDisabled : null;
-                })()
-              ]}
-              onPress={() => {
-                const hasOperationStarted = messages.some(msg => 
-                  msg.type === 'operation_started' || 
-                  (msg.type === 'operation_start' && msg.message === '운행이 시작되었습니다.')
-                );
-                if (!hasOperationStarted) {
-                  Alert.alert('알림', '운행을 시작해야 작동됩니다.');
-                  return;
-                }
-                setSettlementModalVisible(true);
-              }}
-              disabled={(() => {
-                const hasOperationStarted = messages.some(msg => 
-                  msg.type === 'operation_started' || 
-                  (msg.type === 'operation_start' && msg.message === '운행이 시작되었습니다.')
-                );
-                return !hasOperationStarted;
-              })()}
-            >
-              <Text style={[
-                styles.actionButtonText,
-                (() => {
-                  const hasOperationStarted = messages.some(msg => 
-                    msg.type === 'operation_started' || 
-                    (msg.type === 'operation_start' && msg.message === '운행이 시작되었습니다.')
-                  );
-                  return !hasOperationStarted ? styles.actionButtonTextDisabled : null;
-                })()
-              ]}>정산</Text>
-              </TouchableOpacity>
-            
-            {/* 두 번째 행: 카카오페이 송금 | 빈 버튼 | 빈 버튼 */}
-            {(() => {
-              const settlementMessage = messages.find(msg => msg.type === 'settlement');
-              const shouldDisable = isHost && settlementMessage;
-              
-              return (
-                <TouchableOpacity 
-                  style={[
-                    styles.actionButton,
-                    shouldDisable ? styles.actionButtonDisabled : null
-                  ]}
-                  onPress={() => {
-                    if (shouldDisable) {
-                      Alert.alert('알림', '방장은 카카오페이 송금을 사용할 수 없습니다.');
+              )}
+              {/* 첫 번째 행: 계좌 보내기 */}
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={async () => {
+                  try {
+                    // 내정보에서 등록한 계좌 정보 가져오기
+                    const accountInfo = await getAccountInfo();
+                    const bank = accountInfo.bank || '';
+                    const accountNumber = accountInfo.accountNumber || '';
+                    
+                    if (!bank || !accountNumber) {
+                      Alert.alert('알림', '내정보에서 계좌 정보를 먼저 등록해주세요.');
                       return;
                     }
-                    openKakaoPayApp();
-                  }}
-                  disabled={shouldDisable}
-                >
-                  {kakaoPayLogo && (
-                    <Image 
-                      source={kakaoPayLogo} 
-                      style={styles.actionButtonImage}
-                      resizeMode="contain"
-                    />
-                  )}
-                  <Text style={[
-                    styles.actionButtonText,
-                    shouldDisable ? styles.actionButtonTextDisabled : null
-                  ]}>카카오페이 송금</Text>
-                </TouchableOpacity>
-              );
-            })()}
-            <View style={styles.actionButtonEmpty} />
-            <View style={styles.actionButtonEmpty} />
-            
-            {/* 정산 버튼 아래: 송금 완료 버튼 (방장 제외 이용자만) */}
-            {(() => {
-              const settlementMessage = messages.find(msg => msg.type === 'settlement');
-              const hasUserPaid = paidUsers.includes(myUserId);
-              return !isHost && settlementMessage && !hasUserPaid ? (
-                <TouchableOpacity 
-                  style={styles.paymentCompleteButton}
-                  onPress={async () => {
-                    try {
-                      const userName = await getUsername() || '사용자';
-                      const paymentCompleteMessage = {
-                        message_id: Date.now(),
-                        room_id: roomData?.room_id,
-                        sender_id: null,
-                        sender_name: '시스템',
-                        message: `${userName}님 송금완료`,
-                        created_at: new Date().toISOString(),
-                        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-                        type: 'payment_complete',
-                      };
-                      setMessages(prev => [...prev, paymentCompleteMessage]);
-                      setPaidUsers(prev => [...prev, myUserId]);
-                      
-                      // TODO: 백엔드 API 호출
-                      // const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
-                      // await confirmPayment(roomCode);
-                    } catch (error) {
-                      Alert.alert('오류', '송금 완료 처리에 실패했습니다.');
-                    }
-                  }}
-                >
-                  <Text style={styles.paymentCompleteButtonText}>송금 완료</Text>
-                </TouchableOpacity>
-              ) : null;
-            })()}
-            
-            {/* 세 번째 행: 계좌 요청/계좌 보내기 | 신고 | 채팅방 나가기 */}
-              {(() => {
-                const settlementMessage = messages.find(msg => msg.type === 'settlement');
-                console.log('계좌 버튼 - isHost:', isHost, 'settlementMessage:', !!settlementMessage);
-                
-                // 방장이고 정산이 생성되었으면 계좌 보내기 버튼 표시
-                if (isHost && settlementMessage) {
-                  return (
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={async () => {
-                        try {
-                          // TODO: 백엔드 API 호출
-                          // const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
-                          // const accountInfo = await getMyAccount();
-                          // await sendAccount(roomCode);
-                          
-                          // 임시: 계좌 정보 전송 메시지
-                          const accountSendMessage = {
-                            message_id: Date.now(),
-                            room_id: roomData?.room_id,
-                            sender_id: null,
-                            sender_name: '방장',
-                            message: '계좌 정보가 전송되었습니다.',
-                            created_at: new Date().toISOString(),
-                            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-                            type: 'account_sent',
-                          };
-                          setMessages(prev => [...prev, accountSendMessage]);
-                        } catch (error) {
-                          Alert.alert('오류', '계좌 정보 전송에 실패했습니다.');
-                        }
-                      }}
-                    >
-                      <Text style={styles.actionButtonText}>계좌 보내기</Text>
-                    </TouchableOpacity>
-                  );
-                }
-                // 방장이 아니거나 정산이 생성되지 않았으면 계좌 요청 버튼 표시
-                return (
-                  <TouchableOpacity 
-                    style={styles.actionButton}
-                    onPress={handleRequestAccount}
-                  >
-                    <Text style={styles.actionButtonText}>계좌 요청</Text>
-                  </TouchableOpacity>
-                );
-              })()}
+                    
+                    // 계좌 정보 전송 메시지
+                    const accountSendMessage = {
+                      message_id: Date.now(),
+                      room_id: roomData?.room_id,
+                      sender_id: null,
+                      sender_name: '시스템',
+                      message: `계좌 정보: ${bank} ${accountNumber}`,
+                      created_at: new Date().toISOString(),
+                      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+                      type: 'account_sent',
+                    };
+                    setMessages(prev => [...prev, accountSendMessage]);
+                  } catch (error) {
+                    Alert.alert('오류', '계좌 정보 전송에 실패했습니다.');
+                  }
+                }}
+              >
+                <Text style={styles.actionButtonText}>계좌 보내기</Text>
+              </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.actionButton}
                 onPress={() => navigation.navigate('Report', { roomData })}
               >
                 <Text style={styles.actionButtonText}>신고</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={handleLeaveRoom}>
-                <Text style={styles.actionButtonText}>채팅방 나가기</Text>
+              <TouchableOpacity 
+                style={[
+                  styles.actionButton,
+                  isOperationStarted && !isHost ? styles.actionButtonDisabled : null
+                ]} 
+                onPress={handleLeaveRoom}
+                disabled={isOperationStarted && !isHost}
+              >
+                <Text style={[
+                  styles.actionButtonText,
+                  isOperationStarted && !isHost ? styles.actionButtonTextDisabled : null
+                ]}>채팅방 나가기</Text>
             </TouchableOpacity>
-          </View>
+            </ScrollView>
         )}
       </KeyboardAvoidingView>
         
@@ -1526,22 +1513,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: '100%',
+    paddingHorizontal: 4,
   },
   headerRoute: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#0D47A1',
     fontWeight: '500',
     includeFontPadding: false,
     textAlignVertical: 'center',
+    flexShrink: 1,
+    maxWidth: '40%',
   },
   headerArrow: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#0D47A1',
-    marginHorizontal: 8,
+    marginHorizontal: 4,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    lineHeight: 20,
+    lineHeight: 16,
   },
   memberCounterContainer: {
     flexDirection: 'row',
@@ -1572,6 +1563,26 @@ const styles = StyleSheet.create({
   inviteCodeText: {
     fontSize: 13,
     color: '#0D47A1',
+    fontWeight: '600',
+  },
+  operationStartHeader: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+  },
+  operationStartButton: {
+    backgroundColor: '#4A90E2',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  operationStartButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
   // 채팅 메시지 영역
@@ -1653,7 +1664,7 @@ const styles = StyleSheet.create({
   messageTime: {
     fontSize: 10,
     marginTop: 4,
-    alignSelf: 'flex-end',
+    marginBottom: 4,
   },
   // 자신의 메시지 시간 (연한 흰색)
   myMessageTime: {
@@ -1855,10 +1866,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 15,
-    paddingVertical: 10,
+    paddingVertical: 8,
     backgroundColor: '#E0E0E0',
+    paddingBottom: 8,
     borderTopWidth: 1,
     borderTopColor: '#ccc',
+    minHeight: 60,
   },
   closeButton: {
     width: 40,
@@ -1905,11 +1918,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'white',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 6,
     fontSize: 14,
     color: '#333',
     maxHeight: 100,
+    minHeight: 40,
+    textAlignVertical: 'top',
   },
   sendButton: {
     backgroundColor: '#4A90E2',
@@ -1928,9 +1943,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     padding: 15,
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     backgroundColor: '#f5f5f5',
-    maxHeight: 280, // 키보드 높이와 유사하게 고정
+    position: 'absolute',
+    bottom: 60, // inputContainer 높이만큼 위로 올림
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    zIndex: 10,
+  },
+  actionButtonsContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
   },
   actionButton: {
     width: '30%',

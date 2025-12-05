@@ -37,12 +37,14 @@ const ProfileScreen = ({ route, navigation }) => {
       // 서버에서 프로필 정보 가져오기
       try {
         const data = await getMyProfile();
-        if (data.name) {
-          setName(data.name);
+        if (data && data !== null) {
+          if (data.name) {
+            setName(data.name);
+          }
+          setEmail(data.email || '');
+          setStudentId(data.studentId || '');
+          setPhone(data.phone || '');
         }
-        setEmail(data.email || '');
-        setStudentId(data.studentId || '');
-        setPhone(data.phone || '');
       } catch (apiError) {
         console.error('프로필 조회 에러:', apiError);
         // API 에러가 발생해도 AsyncStorage의 이름으로 계속 진행
@@ -158,9 +160,6 @@ const ProfileScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       )}
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>로그아웃</Text>
-      </TouchableOpacity>
     </View>
   );
 };

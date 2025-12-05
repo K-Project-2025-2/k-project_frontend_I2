@@ -22,8 +22,9 @@ const SettlementModal = ({ visible, onClose, roomData, onSettlementSubmit, initi
       setSelectedMemberCount(Object.keys(initialSettlementData.individualCosts || {}).length || 4);
     } else {
       // initialSettlementData가 없으면 초기화
-      // roomData의 current_count 또는 members 배열 길이를 기본값으로 사용
-      const defaultCount = roomData?.current_count || 
+      // roomData의 current_count 또는 memberCount를 기본값으로 사용
+      const defaultCount = roomData?.memberCount || 
+                          roomData?.current_count || 
                           (roomData?.members?.length) || 
                           (roomData?.participants?.length) ||
                           (roomData?.member_names?.length) ||
@@ -99,10 +100,7 @@ const SettlementModal = ({ visible, onClose, roomData, onSettlementSubmit, initi
     }
   }, [totalCost, selectedMemberCount]);
 
-  // 인원 선택 핸들러
-  const handleMemberCountSelect = (count) => {
-    setSelectedMemberCount(count);
-  };
+  // 인원 선택 핸들러 (제거 - 방 인원수로 고정)
 
   // 초기화
   const handleReset = () => {
@@ -171,58 +169,11 @@ const SettlementModal = ({ visible, onClose, roomData, onSettlementSubmit, initi
               <Text style={styles.unitText}>원</Text>
             </View>
 
-            {/* 인원 섹션 */}
+            {/* 인원 섹션 - 방 인원수로 고정 */}
             <View style={styles.section}>
               <Text style={styles.label}>인원</Text>
-              <View style={styles.memberCountButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.memberCountButton,
-                    selectedMemberCount === 2 && styles.memberCountButtonActive,
-                  ]}
-                  onPress={() => handleMemberCountSelect(2)}
-                >
-                  <Text
-                    style={[
-                      styles.memberCountButtonText,
-                      selectedMemberCount === 2 && styles.memberCountButtonTextActive,
-                    ]}
-                  >
-                    2
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.memberCountButton,
-                    selectedMemberCount === 3 && styles.memberCountButtonActive,
-                  ]}
-                  onPress={() => handleMemberCountSelect(3)}
-                >
-                  <Text
-                    style={[
-                      styles.memberCountButtonText,
-                      selectedMemberCount === 3 && styles.memberCountButtonTextActive,
-                    ]}
-                  >
-                    3
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.memberCountButton,
-                    selectedMemberCount === 4 && styles.memberCountButtonActive,
-                  ]}
-                  onPress={() => handleMemberCountSelect(4)}
-                >
-                  <Text
-                    style={[
-                      styles.memberCountButtonText,
-                      selectedMemberCount === 4 && styles.memberCountButtonTextActive,
-                    ]}
-                  >
-                    4
-                  </Text>
-                </TouchableOpacity>
+              <View style={styles.memberCountDisplay}>
+                <Text style={styles.memberCountText}>{selectedMemberCount}명</Text>
               </View>
             </View>
 
@@ -339,28 +290,18 @@ const styles = StyleSheet.create({
     color: '#333',
     marginTop: 5,
   },
-  memberCountButtons: {
-    flexDirection: 'row',
-  },
-  memberCountButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  memberCountDisplay: {
+    backgroundColor: 'white',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     borderRadius: 6,
-    backgroundColor: '#E0E0E0',
     borderWidth: 1,
     borderColor: '#ccc',
-    marginRight: 10,
   },
-  memberCountButtonActive: {
-    backgroundColor: '#4A90E2',
-    borderColor: '#4A90E2',
-  },
-  memberCountButtonText: {
+  memberCountText: {
     fontSize: 16,
     color: '#333',
-  },
-  memberCountButtonTextActive: {
-    color: 'white',
+    fontWeight: '500',
   },
   individualCostRow: {
     flexDirection: 'row',

@@ -2,6 +2,7 @@ import { View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import ResetPasswordScreen from './screen/ResetPasswordScreen';
 
 import SplashScreen from './screens/SplashScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -80,7 +81,14 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="Main" component={MainTabNavigator} />
-
+        <Stack.Screen 
+          name="ResetPassword" 
+          component={ResetPasswordScreen}
+          options={{
+            headerShown: true,
+            title: '비밀번호 재설정',
+          }}
+        />
         {/* 기타 화면들 */}
         <Stack.Screen
           name="BusRoute"

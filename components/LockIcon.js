@@ -1,50 +1,32 @@
 import React from 'react';
-import { Image, View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 
 const LockIcon = ({ size = 16 }) => {
-  // 이미지 파일 경로 (이미지 파일이 없을 경우를 대비해 try-catch 사용)
-  let lockImage = null;
-  try {
-    lockImage = require('../assets/images/lock.png');
-  } catch (e) {
-    // 이미지 파일이 없으면 View로 그린 자물쇠 표시
-    console.warn('자물쇠 이미지 파일을 찾을 수 없습니다. assets/images/lock.png 파일을 추가하세요.');
-  }
-
-  // 이미지 파일이 있으면 Image 컴포넌트 사용
-  if (lockImage) {
-    return (
-      <View style={[styles.imageContainer, { width: size, height: size }]}>
-        <Image
-          source={lockImage}
-          style={styles.lockIcon}
-          resizeMode="contain"
-        />
-      </View>
-    );
-  }
-
-  // 이미지 파일이 없으면 View로 자물쇠 그리기
-  const bodyWidth = size * 0.7;
-  const bodyHeight = size * 0.55;
-  const shackleWidth = size * 0.85;
-  const shackleHeight = size * 0.65;
+  // Bootstrap Icons bi-lock 스타일의 자물쇠 아이콘
+  // bi-lock은 닫힌 자물쇠 모양 - 고리가 본체를 감싸고 있음
+  const bodyWidth = size * 0.65;
+  const bodyHeight = size * 0.5;
+  const shackleWidth = size * 0.9;
+  const shackleHeight = size * 0.6;
+  const keyholeSize = size * 0.16;
+  const shackleThickness = size * 0.08;
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      {/* 자물쇠 본체 (파란색) - 아래쪽 */}
+      {/* 자물쇠 본체 (사각형) - 아래쪽 */}
       <View 
         style={[
           styles.lockBody, 
           { 
             width: bodyWidth, 
             height: bodyHeight,
-            borderRadius: 3,
-            bottom: size * 0.05,
+            borderRadius: size * 0.1,
+            top: size * 0.35,
+            left: (size - bodyWidth) / 2,
           }
         ]} 
       />
-      {/* 자물쇠 고리 (회색) - 닫힌 상태: 본체를 감싸고 있음 */}
+      {/* 자물쇠 고리 (U자형) - 본체를 감싸는 형태 */}
       <View 
         style={[
           styles.lockShackle, 
@@ -53,19 +35,22 @@ const LockIcon = ({ size = 16 }) => {
             height: shackleHeight,
             borderTopLeftRadius: shackleHeight / 2,
             borderTopRightRadius: shackleHeight / 2,
-            top: 0,
-            bottom: bodyHeight * 0.4, // 본체 위로 내려와서 감싸는 형태
+            borderWidth: shackleThickness,
+            top: size * 0.05,
+            left: (size - shackleWidth) / 2,
           }
         ]} 
       />
-      {/* 키홀 (검은색 원) */}
+      {/* 키홀 (원형) - 본체 중앙 */}
       <View 
         style={[
           styles.keyhole,
           {
-            width: size * 0.15,
-            height: size * 0.15,
-            top: bodyHeight * 0.3,
+            width: keyholeSize,
+            height: keyholeSize,
+            borderRadius: keyholeSize / 2,
+            top: size * 0.4,
+            left: (size - keyholeSize) / 2,
           }
         ]}
       />
@@ -74,43 +59,30 @@ const LockIcon = ({ size = 16 }) => {
 };
 
 const styles = StyleSheet.create({
-  imageContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-    overflow: 'visible', // 고리 안쪽이 보이도록 visible로 변경
-  },
-  lockIcon: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'transparent',
-    tintColor: undefined, // 이미지 색상 그대로 유지
-    // 이미지가 깨지지 않도록 contain 모드 사용
-  },
   container: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
   lockBody: {
-    backgroundColor: '#4A90E2', // 파란색
+    backgroundColor: '#333', // Bootstrap Icons bi-lock 스타일 - 어두운 회색
     position: 'absolute',
-    borderWidth: 2,
-    borderColor: '#2E5C8A',
+    borderWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
   },
   lockShackle: {
-    borderWidth: 3,
-    borderColor: '#666666', // 회색 (더 진하게)
-    borderBottomWidth: 3, // 하단 테두리도 표시 (닫힌 상태)
+    borderColor: '#333', // Bootstrap Icons bi-lock 스타일 - 어두운 회색
+    borderBottomWidth: 0, // 하단 테두리 제거 (U자형)
     position: 'absolute',
-    left: '50%',
-    transform: [{ translateX: -1 }], // 중앙 정렬
-    // 고리가 본체를 감싸고 있는 형태
+    backgroundColor: 'transparent',
     zIndex: 1,
   },
   keyhole: {
-    backgroundColor: '#000000',
-    borderRadius: 50,
+    backgroundColor: '#333', // Bootstrap Icons bi-lock 스타일 - 어두운 회색
     position: 'absolute',
     zIndex: 2,
   },

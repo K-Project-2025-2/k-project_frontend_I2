@@ -40,9 +40,9 @@ const CustomerSupportScreen = ({ navigation }) => {
 
           {/* 고객센터 안내 박스 */}
           <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>📞 전화 상담 안내</Text>
+            <Text style={styles.infoTitle}>📞 학생복지위원회 전화번호</Text>
             <Text style={styles.infoText}>0000-0000</Text>
-            <Text style={styles.infoSubText}>평일 09:00 ~ 18:00 (주말/공휴일 휴무)</Text>
+            <Text style={styles.infoSubText}>평일 09:00 ~ 18:00</Text>
           </View>
 
           <View style={styles.divider} />
@@ -91,13 +91,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+    paddingTop: 15,
     backgroundColor: '#FFF',
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
-    marginTop: 10,
+    marginBottom: 12,
+    marginTop: 5,
   },
   // 안내 박스 스타일
   infoBox: {

@@ -8,10 +8,12 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getMyProfile } from '../services/myPageApi';
-import { getUsername } from '../services/apiConfig';
+import { getUsername, getAccountInfo, removeAuthToken, removeUsername, removeUserId, removeAccountInfo, removeParticipatingRooms } from '../services/apiConfig';
+import { logout } from '../services/authApi';
 
 const menuItems = [
   '프로필',
@@ -26,8 +28,9 @@ const MyPageScreen = ({ navigation, route }) => {
   const email = route?.params?.email || "";
   const password = route?.params?.password || "";
 
-  const bank = route?.params?.bank || "";
-  const accountNumber = route?.params?.accountNumber || "";
+  // route.params에서 계좌 정보를 가져오되, 없으면 AsyncStorage에서 불러오기
+  const [bank, setBank] = useState(route?.params?.bank || "");
+  const [accountNumber, setAccountNumber] = useState(route?.params?.accountNumber || "");
   
   const [username, setUsername] = useState(''); // 기본값
   const [loading, setLoading] = useState(true);
@@ -45,12 +48,19 @@ const MyPageScreen = ({ navigation, route }) => {
       // 서버에서 프로필 정보 가져오기 (서버에 저장된 이름이 있으면 우선 사용)
       try {
         const data = await getMyProfile();
-        if (data.name) {
+        if (data && data !== null && data.name) {
           setUsername(data.name);
         }
       } catch (apiError) {
         console.error('프로필 조회 에러:', apiError);
         // API 에러가 발생해도 AsyncStorage의 이름으로 계속 진행
+      }
+
+      // AsyncStorage에서 계좌 정보 불러오기
+      const accountInfo = await getAccountInfo();
+      if (accountInfo.bank || accountInfo.accountNumber) {
+        setBank(accountInfo.bank);
+        setAccountNumber(accountInfo.accountNumber);
       }
     } catch (error) {
       console.error('이름 불러오기 에러:', error);
@@ -113,11 +123,54 @@ const MyPageScreen = ({ navigation, route }) => {
     Alert.alert('페이지 이동', `${item} 화면으로 이동합니다.`);
   };
 
+  const handleLogout = async () => {
+    Alert.alert(
+      '로그아웃',
+      '정말 로그아웃 하시겠습니까?',
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '로그아웃',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // 로그아웃 API 호출
+              await logout();
+              // 모든 인증 정보 및 데이터 삭제
+              await removeAuthToken();
+              await removeUserId();
+              await removeUsername();
+              await removeAccountInfo();
+              await removeParticipatingRooms();
+              // 로그인 화면으로 이동
+              navigation.replace('Login');
+            } catch (error) {
+              console.error('로그아웃 에러:', error);
+              // 에러가 발생해도 로컬 데이터는 삭제하고 로그인 화면으로 이동
+              await removeAuthToken();
+              await removeUserId();
+              await removeUsername();
+              await removeAccountInfo();
+              await removeParticipatingRooms();
+              navigation.replace('Login');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container}>
         <View style={styles.profileSection}>
-          <View style={styles.avatar} />
+          <Image 
+            source={require('../assets/images/image.png')} 
+            style={styles.avatar} 
+          />
           <Text style={styles.nameText}>{username}</Text>
         </View>
 
@@ -128,12 +181,26 @@ const MyPageScreen = ({ navigation, route }) => {
             <Text style={styles.accountNumberText}>{accountNumber}</Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.copyButton}
-            onPress={() => handleCopyAccount(accountNumber)}
-          >
-            <Text style={styles.copyButtonText}>복사</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.copyButton}
+              onPress={() => handleCopyAccount(accountNumber)}
+            >
+              <Text style={styles.copyButtonText}>복사</Text>
+            </TouchableOpacity>
+            {accountNumber && accountNumber.trim() ? (
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => navigation.navigate('AccountRegister', {
+                  bank: bank,
+                  accountNumber: accountNumber,
+                  isEdit: true
+                })}
+              >
+                <Text style={styles.editButtonText}>수정</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.menuListSection}>
@@ -147,6 +214,10 @@ const MyPageScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           ))}
         </View>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>로그아웃</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -172,8 +243,8 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#D9D9D9',
     marginBottom: 12,
+    resizeMode: 'cover',
   },
   nameText: {
     fontSize: 20,
@@ -200,6 +271,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#555',
   },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   copyButton: {
     backgroundColor: '#D1D1D1',
     paddingHorizontal: 16,
@@ -209,6 +284,16 @@ const styles = StyleSheet.create({
   copyButtonText: {
     fontSize: 14,
     color: '#333',
+  },
+  editButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 5,
+  },
+  editButtonText: {
+    fontSize: 14,
+    color: '#FFF',
   },
   menuListSection: {
     marginTop: 10,
@@ -221,5 +306,19 @@ const styles = StyleSheet.create({
   },
   menuItemText: {
     fontSize: 17,
+  },
+  logoutButton: {
+    marginTop: 30,
+    marginBottom: 30,
+    marginHorizontal: 20,
+    backgroundColor: '#EBF3FF',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: 'black',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

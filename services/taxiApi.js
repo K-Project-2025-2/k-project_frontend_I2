@@ -6,19 +6,26 @@ import { API_BASE_URL, getAuthHeaders } from './apiConfig';
 
 // 방 생성 (Swagger 명세에 맞게 수정)
 // Swagger: POST /api/taxi/rooms
-// 요청: { meetingPoint, destination, meetingTime, capacity }
-export const createRoom = async (meetingPoint, destination, meetingTime, capacity) => {
+// 요청: { meetingPoint, destination, meetingTime, capacity, isPublic }
+export const createRoom = async (meetingPoint, destination, meetingTime, capacity, isPublic = true) => {
   try {
     const headers = await getAuthHeaders();
+    const requestBody = {
+      meetingPoint,
+      destination,
+      meetingTime, // ISO 8601 형식 (예: "2024-01-01T10:00:00")
+      capacity,
+    };
+    
+    // isPublic 필드가 있으면 추가
+    if (isPublic !== undefined) {
+      requestBody.isPublic = isPublic;
+    }
+    
     const response = await fetch(`${API_BASE_URL}/api/taxi/rooms`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        meetingPoint,
-        destination,
-        meetingTime, // ISO 8601 형식 (예: "2024-01-01T10:00:00")
-        capacity,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (response.status === 200) {
@@ -40,26 +47,50 @@ export const createRoom = async (meetingPoint, destination, meetingTime, capacit
   }
 };
 
-// 방 목록 조회
-// ⚠️ Swagger에 없는 API - 백엔드에 추가 요청 필요
-export const getRooms = async () => {
+// 내가 속한 택시 방 목록 조회
+// ✅ Swagger: GET /api/taxi/rooms/my
+export const getMyRooms = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/my`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.rooms || data.data || data;
+      // 배열로 반환
+      return Array.isArray(data) ? data : [];
     } else {
-      throw new Error('방 목록 조회 실패');
+      throw new Error('내 방 목록 조회 실패');
     }
   } catch (error) {
-    console.error('방 목록 조회 에러:', error);
+    console.error('내 방 목록 조회 에러:', error);
     throw error;
+  }
+};
+
+// 방 목록 조회 (전체 공개 방 목록 - Swagger에 없지만 필요시 사용)
+// ⚠️ Swagger에 없는 API - 백엔드에 추가 요청 필요
+export const getRooms = async () => {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data.rooms || data.data || []);
+    } else {
+      // API가 없으면 빈 배열 반환
+      return [];
+    }
+  } catch (error) {
+    console.log('전체 방 목록 조회 실패 (API 없음):', error.message);
+    // API가 없어도 에러를 던지지 않고 빈 배열 반환
+    return [];
   }
 };
 

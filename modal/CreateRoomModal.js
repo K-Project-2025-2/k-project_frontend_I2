@@ -14,9 +14,9 @@ import { createRoom } from '../services/taxiApi';
 
 // 위치 목록
 const LOCATIONS = [
-  '기흥3번출',
-  '기흥4번출',
-  '강대역1번',
+  '기흥역3번출구',
+  '기흥역4번출구',
+  '강대역1번출구',
   '샬롬관',
   '인사관',
   '이공관',
@@ -34,6 +34,10 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
   const [maxMembers, setMaxMembers] = useState(4);
   // 초대코드 설정 (ON/OFF)
   const [inviteCodeEnabled, setInviteCodeEnabled] = useState(true);
+  // 출발 시각 설정 (분 단위, 0-30분)
+  const [departureMinutes, setDepartureMinutes] = useState(0);
+  // 방 공개/비공개 설정
+  const [isPublic, setIsPublic] = useState(true);
   // 직접 입력 모드
   const [directInputMode, setDirectInputMode] = useState(false);
   const [directDeparture, setDirectDeparture] = useState('');
@@ -89,6 +93,8 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
     setDestination('');
     setMaxMembers(4);
     setInviteCodeEnabled(true);
+    setDepartureMinutes(0);
+    setIsPublic(true);
     setDirectInputMode(false);
     setDirectDeparture('');
     setDirectDestination('');
@@ -101,35 +107,55 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
       return;
     }
 
+    // 출발 시각 계산 (현재 시간 + 선택한 분)
+    const now = new Date();
+    const meetingTime = new Date(now.getTime() + departureMinutes * 60000);
+    
+    // 30분 제한 체크
+    const maxTime = new Date(now.getTime() + 30 * 60000);
+    if (meetingTime > maxTime) {
+      Alert.alert('알림', '출발 시간은 현재로부터 최대 30분 내에서만 설정 가능합니다.');
+      return;
+    }
+
     setLoading(true);
     try {
-      // 현재 시간을 ISO 8601 형식으로 변환
-      const meetingTime = new Date().toISOString();
+      // ISO 8601 형식으로 변환
+      const meetingTimeISO = meetingTime.toISOString();
       
       // API 호출 (Swagger 명세: meetingPoint, destination, meetingTime, capacity)
       const response = await createRoom(
         departure,      // meetingPoint
         destination,    // destination
-        meetingTime,    // meetingTime (ISO 8601)
-        maxMembers      // capacity
+        meetingTimeISO, // meetingTime (ISO 8601)
+        maxMembers,     // capacity
+        isPublic        // isPublic (공개 여부)
       );
 
-      // API 응답 데이터를 UI 형식에 맞게 변환
+      // API 응답 데이터를 UI 형식에 맞게 변환 (백엔드 응답 그대로 전달)
       const roomData = {
-        room_id: response.id || response.roomCode || nextRoomId,
+        id: response.id,
         roomCode: response.roomCode,
+        meetingPoint: response.meetingPoint || departure,
+        destination: response.destination || destination,
+        capacity: response.capacity || maxMembers,
+        memberCount: response.memberCount || 1,
+        leaderId: response.leaderId,
+        status: response.status || 'OPEN',
+        meetingTime: response.meetingTime || meetingTimeISO,
+        // UI 호환성을 위한 필드도 포함
+        room_id: response.id,
         departure: response.meetingPoint || departure,
         destination: response.destination || destination,
         max_members: response.capacity || maxMembers,
         current_count: response.memberCount || 1,
         host_id: response.leaderId,
-        status: response.status || 'ACTIVE',
         invite_code: response.roomCode,
         invite_code_enabled: inviteCodeEnabled,
-        meetingTime: response.meetingTime || meetingTime,
+        isPublic: isPublic,
         // UI 표시용 추가 필드
         members: `${response.capacity || maxMembers}명`,
-        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        time: meetingTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
       };
 
       // 방 생성 완료 화면 표시
@@ -437,6 +463,32 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
               </View>
             </View>
 
+            {/* 출발 시각 설정 */}
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>출발 시각</Text>
+              <View style={styles.timeSettingContainer}>
+                <TextInput
+                  style={styles.timeInput}
+                  value={departureMinutes.toString()}
+                  onChangeText={(text) => {
+                    const minutes = parseInt(text) || 0;
+                    if (minutes >= 0 && minutes <= 30) {
+                      setDepartureMinutes(minutes);
+                    }
+                  }}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  maxLength={2}
+                />
+                <Text style={styles.timeLabel}>분 후</Text>
+                {departureMinutes > 0 && (
+                  <Text style={styles.calculatedTime}>
+                    ({new Date(new Date().getTime() + departureMinutes * 60000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })})
+                  </Text>
+                )}
+              </View>
+            </View>
+
             {/* 초대코드 설정 */}
             <View style={styles.settingSection}>
               <Text style={styles.settingLabel}>초대코드설정</Text>
@@ -471,6 +523,45 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
                     ]}
                   >
                     OFF
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 방 공개/비공개 설정 */}
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>방 공개</Text>
+              <View style={styles.settingOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.settingOption,
+                    isPublic && styles.settingOptionActive,
+                  ]}
+                  onPress={() => setIsPublic(true)}
+                >
+                  <Text
+                    style={[
+                      styles.settingOptionText,
+                      isPublic && styles.settingOptionTextActive,
+                    ]}
+                  >
+                    공개
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.settingOption,
+                    !isPublic && styles.settingOptionActive,
+                  ]}
+                  onPress={() => setIsPublic(false)}
+                >
+                  <Text
+                    style={[
+                      styles.settingOptionText,
+                      !isPublic && styles.settingOptionTextActive,
+                    ]}
+                  >
+                    비공개
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -638,7 +729,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   locationLabel: {
-    fontSize: 18,
+    fontSize: 17,
     color: '#333',
     fontWeight: 'bold',
   },
@@ -648,7 +739,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 16,
-    fontSize: 23,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#333',
     textAlign: 'center',
@@ -674,7 +765,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   directInputLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 8,
     color: '#333',
@@ -698,7 +789,7 @@ const styles = StyleSheet.create({
   },
   directInputButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   // 위치 버튼 그리드
@@ -730,7 +821,7 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   locationButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#333',
   },
   // 설정 섹션
@@ -741,7 +832,7 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     flex: 2,
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
   },
@@ -765,11 +856,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A90E2',
   },
   settingOptionText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#333',
   },
   settingOptionTextActive: {
     color: 'white',
+  },
+  // 출발 시각 설정
+  timeSettingContainer: {
+    flex: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  timeInput: {
+    width: 60,
+    backgroundColor: 'white',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    fontSize: 14,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+  },
+  timeLabel: {
+    fontSize: 14,
+    color: '#333',
+  },
+  calculatedTime: {
+    fontSize: 14,
+    color: '#4A90E2',
+    fontWeight: '500',
   },
   // 모달 푸터
   modalFooter: {

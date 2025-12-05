@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { sendVerificationCode, verifyCode, signup } from '../services/authApi';
 import { saveUsername } from '../services/apiConfig';
 
@@ -22,6 +23,8 @@ const RegisterScreen = ({ navigation }) => {
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [loading, setLoading] = useState(false);
   const [verificationLoading, setVerificationLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleVerificationRequest = async () => {
     if (!emailId.trim()) {
@@ -188,26 +191,50 @@ const RegisterScreen = ({ navigation }) => {
         {/* 비밀번호 */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>비밀번호</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="비밀번호"
-            placeholderTextColor="#999"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="비밀번호"
+              placeholderTextColor="#999"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? (
+                <MaterialIcons name="visibility" size={20} color="#666" />
+              ) : (
+                <MaterialIcons name="visibility-off" size={20} color="#666" style={styles.eyeIconHidden} />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* 비밀번호 확인 */}
         <View style={styles.inputSection}>
-          <TextInput
-            style={styles.input}
-            placeholder="비밀번호 확인"
-            placeholderTextColor="#999"
-            secureTextEntry
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="비밀번호 확인"
+              placeholderTextColor="#999"
+              secureTextEntry={!showConfirmPassword}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+            >
+              {showConfirmPassword ? (
+                <MaterialIcons name="visibility" size={20} color="#666" />
+              ) : (
+                <MaterialIcons name="visibility-off" size={20} color="#666" style={styles.eyeIconHidden} />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* 회원가입 버튼 */}
@@ -280,6 +307,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     backgroundColor: 'white',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: 'white',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  eyeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  eyeIconHidden: {
+    opacity: 0.3,
   },
   emailRow: {
     flexDirection: 'row',

@@ -52,6 +52,10 @@ const LoginScreen = ({ navigation }) => {
     navigation.navigate('Register');
   };
 
+  const handlePasswordReset = () => {
+    navigation.navigate('ResetPassword');
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
@@ -105,6 +109,10 @@ const LoginScreen = ({ navigation }) => {
           <Text style={styles.signupText}>
             계정이 없으신가요? <Text style={styles.signupLink}>회원가입</Text>
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={handlePasswordReset} style={styles.passwordResetButton}>
+          <Text style={styles.passwordResetText}>비밀번호 재설정</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -211,5 +219,14 @@ const styles = StyleSheet.create({
   signupLink: {
     color: '#4A90E2',
     fontWeight: 'bold',
+  },
+  passwordResetButton: {
+    marginTop: 15,
+    alignItems: 'center',
+  },
+  passwordResetText: {
+    color: '#4A90E2',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

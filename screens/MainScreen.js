@@ -8,6 +8,7 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -102,8 +103,8 @@ const CombinedRealTimeCard = ({ navigation, onRefresh }) => {
     : () => setIsStarbucksForward(p => !p);
 
   const currentTitle = isGiheungActive
-    ? (isGiheungForward ? '기흥역 ➡️ 이공관' : '이공관 ➡️ 기흥역')
-    : (isStarbucksForward ? '스타벅스 ➡️ 이공관' : '이공관 ➡️ 스타벅스');
+    ? (isGiheungForward ? '기흥역 -> 이공관' : '이공관 -> 기흥역')
+    : (isStarbucksForward ? '스타벅스 -> 이공관' : '이공관 -> 스타벅스');
 
   const currentStations = isGiheungActive
     ? (isGiheungForward ? FORWARD_STATIONS_GIHEUNG : REVERSE_STATIONS_GIHEUNG)
@@ -161,10 +162,10 @@ const CombinedRealTimeCard = ({ navigation, onRefresh }) => {
             <TouchableOpacity
               style={styles.toggleButton}
               onPress={handleToggleDirection}>
-              <Text style={styles.toggleButtonText}>🔄</Text>
+              <Text style={styles.toggleButtonText}>⇄</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-              <Text style={styles.refreshText}>새로고침</Text>
+              <MaterialIcons name="refresh" size={18} color="#333" />
             </TouchableOpacity>
           </View>
         </View>
@@ -254,9 +255,6 @@ const MainScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.headerButton}>
           <Text style={styles.headerButtonText}>KangnamBUS</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerButton} onPress={goToMyPage}>
-          <Text style={styles.headerButtonText}>프로필</Text>
-        </TouchableOpacity>
       </View>
 
 
@@ -264,12 +262,25 @@ const MainScreen = ({ navigation }) => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>달구지 시간표</Text>
-            <Text style={styles.dateText}>{new Date().toLocaleDateString()}</Text>
+            <View style={styles.dateContainer}>
+              <Text style={styles.dateText}>
+                {(() => {
+                  const now = new Date();
+                  const year = now.getFullYear();
+                  const month = String(now.getMonth() + 1).padStart(2, '0');
+                  const day = String(now.getDate()).padStart(2, '0');
+                  const hours = String(now.getHours()).padStart(2, '0');
+                  const minutes = String(now.getMinutes()).padStart(2, '0');
+                  return `${year}/${month}/${day} ${hours}:${minutes}`;
+                })()}
+              </Text>
+              <Text style={styles.basisText}>기준</Text>
+            </View>
           </View>
 
           <View style={styles.routeTitleContainer}>
-            <Text style={styles.routeTitleText}>기흥역 ↔️ 강남대학교</Text>
-            <Text style={styles.routeTitleText}>       스타벅스 ↔️ 강남대학교</Text>
+            <Text style={styles.routeTitleText}>기흥역 ↔ 강남대학교</Text>
+            <Text style={styles.routeTitleText}>       스타벅스 ↔ 강남대학교</Text>
           </View>
 
           <View style={styles.horizontalContainer}>
@@ -308,7 +319,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: (StatusBar.currentHeight || 0) + 10,
+    paddingTop: (StatusBar.currentHeight || 0) + 65,
     paddingBottom: 10,
     backgroundColor: '#f5f5f5',
   },
@@ -341,21 +352,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#4A90E2',
   },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   dateText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  basisText: {
     fontSize: 14,
     color: '#666',
   },
   routeTitleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 1,
+    paddingTop: 15,
+    marginBottom: 5,
   },
   routeTitleText: {
     fontSize: 14,
@@ -375,7 +396,7 @@ const styles = StyleSheet.create({
   scheduleItem: {
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    paddingTop: 10,
+    paddingTop: 20,
     marginBottom: 10,
     minHeight: 100,
   },
@@ -499,6 +520,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 5,
+    marginBottom: 15,
   },
   stationButton: {
     flex: 1,
