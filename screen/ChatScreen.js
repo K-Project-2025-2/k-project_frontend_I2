@@ -154,10 +154,14 @@ const ChatScreen = ({ navigation, route }) => {
   
   // 채팅방 입장 시 메시지 조회 및 Polling 설정
   // 메시지에서 운행 시작 상태 복원 (모든 사용자, 메시지 로드 후)
+  // 실제로 운행이 시작된 메시지인지 확인 (메시지 내용이 "운행이 시작되었습니다."인 경우만)
   useEffect(() => {
     if (messages.length === 0) return;
     
-    const hasOperationStarted = messages.some(msg => msg.type === 'operation_started');
+    const hasOperationStarted = messages.some(msg => 
+      msg.type === 'operation_started' && 
+      (msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
+    );
     
     // 운행이 시작되었으면 상태 복원 (아직 시작하지 않았을 때만)
     if (hasOperationStarted && !isOperationStarted) {
@@ -335,8 +339,11 @@ const ChatScreen = ({ navigation, route }) => {
                 setIsOperationRequested(true);
               }
               
-              // 운행 시작 메시지가 새로 추가되었는지 확인
-              const hasNewOperationStarted = uniqueNewMessages.some(msg => msg.type === 'operation_started');
+              // 운행 시작 메시지가 새로 추가되었는지 확인 (실제 운행 시작 메시지인지 확인)
+              const hasNewOperationStarted = uniqueNewMessages.some(msg => 
+                msg.type === 'operation_started' && 
+                (msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
+              );
               if (hasNewOperationStarted) {
                 console.log('Polling: 새로운 운행 시작 메시지 감지, 상태 업데이트');
                 setIsOperationStarted(true);
@@ -351,7 +358,11 @@ const ChatScreen = ({ navigation, route }) => {
               return allMessages;
             } else {
               // 새 메시지는 없지만, 기존 메시지에서 운행 시작 상태 확인 (메시지가 업데이트되었을 수 있음)
-              const hasOperationStarted = formattedMessages.some(msg => msg.type === 'operation_started');
+              // 실제 운행 시작 메시지인지 확인
+              const hasOperationStarted = formattedMessages.some(msg => 
+                msg.type === 'operation_started' && 
+                (msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
+              );
               
               if (hasOperationStarted && !isOperationStarted) {
                 console.log('Polling: 기존 메시지에서 운행 시작 발견, 상태 업데이트');
@@ -746,14 +757,19 @@ const ChatScreen = ({ navigation, route }) => {
       await startOperation(roomCode);
       setIsOperationStarted(true);
       
+      // 운행 시작 메시지를 모든 참여자에게 전송
+      const startMessageText = '운행이 시작되었습니다.';
+      const response = await sendMessage(roomCode, startMessageText);
+      
+      // 전송된 메시지를 메시지 목록에 추가
       const startMessage = {
-        message_id: Date.now(),
-        room_id: roomData?.room_id,
+        message_id: response.id || response.messageId || response.message_id || Date.now(),
+        room_id: response.roomCode || response.roomId || response.room_id || roomData?.room_id,
         sender_id: null,
         sender_name: '시스템',
-        message: '운행이 시작되었습니다.',
-        created_at: new Date().toISOString(),
-        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        message: response.content || response.message || startMessageText,
+        created_at: response.createdAt || response.created_at || new Date().toISOString(),
+        time: new Date(response.createdAt || response.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
         type: 'operation_started',
       };
       setMessages(prev => {
@@ -799,15 +815,26 @@ const ChatScreen = ({ navigation, route }) => {
       const amountPerPerson = response.amountPerPerson || Math.floor(totalCost / memberCount);
       const individualCosts = response.individualCosts || settlementData.individualCosts;
       
-      // 정산 메시지 생성
+      // 정산 정보를 일반 채팅 메시지로 전송
+      const currentUserId = await getUserId();
+      const currentUserIdStr = currentUserId ? String(currentUserId) : null;
+      const userName = await getUsername() || myProfileName || '나';
+      
+      // 정산 메시지 텍스트 생성
+      const settlementMessageText = `정산: 총 ${totalCost.toLocaleString()}원, 1인당 ${amountPerPerson.toLocaleString()}원`;
+      
+      // API를 통해 메시지 전송
+      const messageResponse = await sendMessage(roomCode, settlementMessageText);
+      
+      // 전송된 메시지를 메시지 목록에 추가 (정산 데이터 포함)
       const settlementMessage = {
-        message_id: Date.now(),
-        room_id: roomData?.room_id,
-        sender_id: null,
-        sender_name: '방장',
-        message: `${totalCost.toLocaleString()}원 결제 완료`,
-        created_at: new Date().toISOString(),
-        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        message_id: messageResponse.id || messageResponse.messageId || messageResponse.message_id || Date.now(),
+        room_id: messageResponse.roomCode || messageResponse.roomId || messageResponse.room_id || roomData?.room_id,
+        sender_id: currentUserIdStr,
+        sender_name: userName,
+        message: messageResponse.content || messageResponse.message || settlementMessageText,
+        created_at: messageResponse.createdAt || messageResponse.created_at || new Date().toISOString(),
+        time: new Date(messageResponse.createdAt || messageResponse.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
         type: 'settlement', // 정산 메시지 타입
         settlementData: {
           splitId: response.splitId,
@@ -1117,47 +1144,6 @@ const ChatScreen = ({ navigation, route }) => {
                       <Text style={styles.paidText}>✓ 송금 완료</Text>
                     </View>
                   )}
-                  
-                  <View style={styles.settlementActionButtons}>
-                    <TouchableOpacity 
-                      style={styles.settlementActionButton}
-                      onPress={() => {
-                        openTossApp();
-                        // 외부 앱에서 돌아오면 자동으로 송금 완료 체크
-                        setTimeout(() => {
-                          handlePaymentComplete('토스');
-                        }, 2000);
-                      }}
-                    >
-                      {tossLogo && (
-                        <Image 
-                          source={tossLogo} 
-                          style={styles.paymentLogo}
-                          resizeMode="contain"
-                        />
-                      )}
-                      <Text style={styles.settlementActionButtonText}>토스 송금</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.settlementActionButton}
-                      onPress={() => {
-                        openKakaoPayApp();
-                        // 외부 앱에서 돌아오면 자동으로 송금 완료 체크
-                        setTimeout(() => {
-                          handlePaymentComplete('카카오페이');
-                        }, 2000);
-                      }}
-                    >
-                      {kakaoPayLogo && (
-                        <Image 
-                          source={kakaoPayLogo} 
-                          style={styles.paymentLogo}
-                          resizeMode="contain"
-                        />
-                      )}
-                      <Text style={styles.settlementActionButtonText}>카카오페이 송금</Text>
-                    </TouchableOpacity>
-                  </View>
                   
                   {/* 송금 완료 현황 */}
                   <Text style={styles.paymentStatusText}>
