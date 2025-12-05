@@ -49,18 +49,31 @@ export const createRoom = async (meetingPoint, destination, meetingTime, capacit
 
 // 내가 속한 택시 방 목록 조회
 // ✅ Swagger: GET /api/taxi/rooms/my
+// 응답 형식: [{ id, roomCode, meetingPoint, destination, meetingTime, capacity, status, memberCount, leaderId }]
 export const getMyRooms = async () => {
   try {
     const headers = await getAuthHeaders();
+    console.log('getMyRooms API 호출:', `${API_BASE_URL}/api/taxi/rooms/my`);
     const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/my`, {
       method: 'GET',
       headers,
     });
 
+    console.log('getMyRooms 응답 상태:', response.status);
     if (response.status === 200) {
       const data = await response.json();
-      // 배열로 반환
-      return Array.isArray(data) ? data : [];
+      console.log('getMyRooms 응답 데이터:', JSON.stringify(data, null, 2));
+      
+      // Swagger 명세에 따르면 배열로 반환됨
+      if (Array.isArray(data)) {
+        console.log('getMyRooms 반환할 방 개수:', data.length);
+        return data;
+      } else {
+        // 혹시 객체로 감싸져 있을 경우 처리
+        const rooms = data.rooms || data.data || [];
+        console.log('getMyRooms 반환할 방 개수:', rooms.length);
+        return Array.isArray(rooms) ? rooms : [];
+      }
     } else {
       // 에러 발생 시 빈 배열 반환 (에러를 throw하지 않음)
       const errorText = await response.text().catch(() => '');
@@ -69,7 +82,7 @@ export const getMyRooms = async () => {
     }
   } catch (error) {
     // 네트워크 에러나 기타 에러 발생 시 빈 배열 반환 (에러를 throw하지 않음)
-    // console.error('내 방 목록 조회 에러:', error);
+    console.error('내 방 목록 조회 에러:', error);
     return [];
   }
 };
@@ -161,7 +174,14 @@ export const joinRoom = async (roomCode) => {
       return data;
     } else if (response.status === 400) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '인원 초과');
+      const errorMessage = error.message || error.error || '';
+      // "이미 참여한 방" 또는 "already" 관련 메시지 확인
+      if (errorMessage.includes('이미') || errorMessage.includes('already') || errorMessage.includes('참여')) {
+        // 이미 참여한 방인 경우, 방 정보를 반환하도록 처리
+        // 또는 특별한 플래그를 반환하여 UI에서 처리할 수 있도록
+        throw new Error('이미 참여한 방입니다.');
+      }
+      throw new Error(errorMessage || '인원 초과');
     } else if (response.status === 404) {
       throw new Error('Room not found');
     } else {
