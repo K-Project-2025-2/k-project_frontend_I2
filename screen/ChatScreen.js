@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MemberCounter from '../components/MemberCounter';
 import SettlementModal from '../modal/SettlementModal';
-import { sendMessage, getMessages, startOperation, endOperation, leaveRoom, createSplit, getSplit, confirmPayment } from '../services/taxiApi';
+import { sendMessage, getMessages, startOperation, endOperation, leaveRoom, createSplit, getSplit, confirmPayment, getRoomDetail } from '../services/taxiApi';
 import { getDepositStatus } from '../services/depositApi';
 import { getUsername, getUserId, saveUserId, getAccountInfo } from '../services/apiConfig';
 import { getMyProfile } from '../services/myPageApi';
@@ -42,7 +42,8 @@ try {
 }
 
 const ChatScreen = ({ navigation, route }) => {
-  const { roomData, onLeaveRoom, onAddToParticipatingRooms, isFromCreate } = route.params || {};
+  const { roomData: initialRoomData, onLeaveRoom, onAddToParticipatingRooms, isFromCreate } = route.params || {};
+  const [roomData, setRoomData] = useState(initialRoomData);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   // 액션 버튼 그리드 표시 여부 상태 (초기값 false - 채팅방 입장 시 숨김)
@@ -384,6 +385,41 @@ const ChatScreen = ({ navigation, route }) => {
     };
   }, [roomData?.room_id, roomData?.roomCode, isFromCreate]);
 
+  // 방 정보 실시간 업데이트 Polling (3초마다)
+  useEffect(() => {
+    if (!roomData?.roomCode && !roomData?.room_id) return;
+    
+    const isDemoRoom = roomData?.roomCode && roomData.roomCode.startsWith('100');
+    if (isDemoRoom) return; // 데모 방은 Polling 하지 않음
+    
+    const roomInfoPolling = setInterval(async () => {
+      try {
+        const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
+        const updatedRoomInfo = await getRoomDetail(roomCode);
+        
+        // getRoomDetail이 null을 반환하면 업데이트하지 않음
+        if (!updatedRoomInfo) {
+          return;
+        }
+        
+        // 방 정보 업데이트 (인원수 등)
+        setRoomData(prev => ({
+          ...prev,
+          current_count: updatedRoomInfo.memberCount || updatedRoomInfo.current_count || prev?.current_count,
+          max_members: updatedRoomInfo.capacity || updatedRoomInfo.max_members || prev?.max_members,
+          status: updatedRoomInfo.status || prev?.status,
+        }));
+      } catch (error) {
+        // 에러 발생 시 조용히 처리 (Polling은 계속 진행)
+        // console.log('방 정보 Polling 실패:', error.message);
+      }
+    }, 3000); // 3초마다 확인
+    
+    return () => {
+      clearInterval(roomInfoPolling);
+    };
+  }, [roomData?.roomCode, roomData?.room_id]);
+
   // 송금 완료 처리 (useCallback으로 메모이제이션)
   const handlePaymentComplete = useCallback(async (paymentMethod) => {
     if (!myUserId) return; // myUserId가 없으면 처리하지 않음
@@ -705,7 +741,10 @@ const ChatScreen = ({ navigation, route }) => {
   const currentCount = roomData?.current_count || 1;
   const maxMembers = roomData?.max_members || 4; // 방 생성 시 설정한 인원수 사용
   const inviteCodeEnabled = roomData?.invite_code_enabled;
-  const displayInviteCode = inviteCodeEnabled === false ? 'OFF' : (roomData?.invite_code || 'OFF');
+  // 초대코드 표시: invite_code가 없으면 roomCode 사용
+  const displayInviteCode = inviteCodeEnabled === false 
+    ? 'OFF' 
+    : (roomData?.invite_code || roomData?.roomCode || 'OFF');
   
   // 운행 시작 핸들러
   const handleStartOperation = async () => {
@@ -806,12 +845,26 @@ const ChatScreen = ({ navigation, route }) => {
       const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
       const totalAmount = settlementData.totalCost;
       
+      // 최신 방 정보 가져오기 (실시간 인원수 반영) - 정산 생성 전에 가져오기
+      const latestRoomInfo = await getRoomDetail(roomCode);
+      // getRoomDetail이 null을 반환하면 기존 roomData 사용
+      const actualMemberCount = latestRoomInfo 
+        ? (latestRoomInfo.memberCount || latestRoomInfo.current_count || roomData?.current_count || 2)
+        : (roomData?.current_count || 2);
+      
+      // 방 정보 업데이트
+      setRoomData(prev => ({
+        ...prev,
+        current_count: actualMemberCount,
+        max_members: latestRoomInfo.capacity || latestRoomInfo.max_members || prev?.max_members,
+      }));
+      
       // 정산 생성 API 호출
       const response = await createSplit(roomCode, totalAmount);
       
       // API 응답에서 정산 정보 가져오기
       const totalCost = response.totalAmount || totalAmount;
-      const memberCount = response.memberCount || settlementData.memberCount;
+      const memberCount = response.memberCount || actualMemberCount; // 최신 인원수 사용
       const amountPerPerson = response.amountPerPerson || Math.floor(totalCost / memberCount);
       const individualCosts = response.individualCosts || settlementData.individualCosts;
       
@@ -1113,49 +1166,7 @@ const ChatScreen = ({ navigation, route }) => {
             }
             
             
-            // 정산 메시지인 경우
-            if (msg.type === 'settlement') {
-              const individualCosts = msg.settlementData?.individualCosts || {};
-              const amountPerPerson = msg.settlementData?.amountPerPerson || 0;
-              const memberCount = msg.settlementData?.memberCount || Object.keys(individualCosts).length;
-              const hasUserPaid = paidUsers.includes(myUserId);
-              
-              return (
-                <View key={msg.message_id} style={styles.settlementMessageBubble}>
-                  <Text style={styles.settlementMessageText}>{msg.message}</Text>
-                  <View style={styles.settlementButton}>
-                    <Text style={styles.settlementButtonText}>
-                      {amountPerPerson.toLocaleString()}원
-                    </Text>
-                  </View>
-                  
-                  {/* 송금 완료 체크 버튼 */}
-                  {!hasUserPaid && (
-                    <TouchableOpacity 
-                      style={styles.settlementConfirmButton}
-                      onPress={() => handlePaymentComplete('manual')}
-                    >
-                      <Text style={styles.settlementConfirmButtonText}>송금 완료 체크</Text>
-                    </TouchableOpacity>
-                  )}
-                  
-                  {hasUserPaid && (
-                    <View style={styles.paidIndicator}>
-                      <Text style={styles.paidText}>✓ 송금 완료</Text>
-                    </View>
-                  )}
-                  
-                  {/* 송금 완료 현황 */}
-                  <Text style={styles.paymentStatusText}>
-                    송금 완료: {paidUsers.length}/{memberCount}
-                  </Text>
-                  
-                  <Text style={styles.messageTime}>{msg.time}</Text>
-                </View>
-              );
-            }
-            
-            // 일반 메시지
+            // 일반 메시지 (정산 메시지도 일반 메시지처럼 표시)
             // 자신의 메시지인지 확인 (sender_id가 null이거나 시스템 메시지인 경우 제외)
             // 서버에서 받은 senderId와 현재 사용자 ID를 문자열로 변환하여 비교
             const msgSenderId = msg.sender_id !== null && msg.sender_id !== undefined ? String(msg.sender_id) : null;

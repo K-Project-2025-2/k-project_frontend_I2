@@ -46,8 +46,31 @@ const TaxiScreen = ({ navigation }) => {
   useEffect(() => {
     const loadRooms = async () => {
       try {
+        // 먼저 AsyncStorage에서 데이터 불러오기 (빠른 표시를 위해)
+        const savedRooms = await getParticipatingRooms();
+        if (savedRooms && savedRooms.length > 0) {
+          // 데모 데이터 필터링
+          const filteredSavedRooms = savedRooms.filter(room => {
+            const roomCode = room.roomCode || room.invite_code || '';
+            return !roomCode.startsWith('100');
+          });
+          if (filteredSavedRooms.length > 0) {
+            setParticipatingRooms(filteredSavedRooms);
+          }
+        }
+        
         // 백엔드에서 내가 참여중인 방 목록 가져오기
-        const myRooms = await getMyRooms();
+        let myRooms = [];
+        try {
+          myRooms = await getMyRooms();
+          console.log('getMyRooms 응답:', myRooms);
+        } catch (error) {
+          // 에러 발생 시 조용히 처리 (콘솔 에러 로그 제거)
+          // console.error('내 방 목록 조회 실패:', error);
+          // 에러 발생 시 빈 배열로 처리
+          myRooms = [];
+        }
+        
         if (myRooms && myRooms.length > 0) {
           // API 응답을 UI 형식에 맞게 변환
           // 백엔드에서 받은 데이터를 우선 사용 (나간 방은 백엔드에서 제거되므로)
@@ -61,7 +84,7 @@ const TaxiScreen = ({ navigation }) => {
               current_count: room.memberCount,
               host_id: room.leaderId,
               status: room.status,
-              invite_code: room.roomCode,
+              invite_code: room.roomCode || room.invite_code, // roomCode를 invite_code로도 사용
               invite_code_enabled: room.invite_code_enabled !== undefined ? room.invite_code_enabled : true, // 백엔드 응답 또는 기본값 true
               meetingTime: room.meetingTime,
               time: new Date(room.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
@@ -77,12 +100,24 @@ const TaxiScreen = ({ navigation }) => {
           // 초기 로드 완료 표시
           isInitialLoadComplete.current = true;
         } else {
-          // 백엔드가 빈 배열을 반환하면 참여중인 방 목록을 비웁니다 (영구적으로 나간 처리)
-          setParticipatingRooms([]);
-          // AsyncStorage도 비워서 나간 방이 다시 나타나지 않도록 함
-          await saveParticipatingRooms([]).catch(err => {
-            console.error('AsyncStorage 비우기 실패:', err);
-          });
+          // API가 빈 배열을 반환하면, AsyncStorage에 데이터가 있으면 유지
+          // (API가 실패했을 수도 있으므로)
+          const savedRooms = await getParticipatingRooms();
+          if (savedRooms && savedRooms.length > 0) {
+            // 데모 데이터 필터링
+            const filteredSavedRooms = savedRooms.filter(room => {
+              const roomCode = room.roomCode || room.invite_code || '';
+              return !roomCode.startsWith('100');
+            });
+            if (filteredSavedRooms.length > 0) {
+              setParticipatingRooms(filteredSavedRooms);
+            } else {
+              setParticipatingRooms([]);
+            }
+          } else {
+            // AsyncStorage에도 없으면 빈 배열로 설정
+            setParticipatingRooms([]);
+          }
           // 초기 로드 완료 표시
           isInitialLoadComplete.current = true;
         }
@@ -103,31 +138,31 @@ const TaxiScreen = ({ navigation }) => {
         const allRooms = await getRooms();
         console.log('전체 방 목록 API 응답:', JSON.stringify(allRooms, null, 2));
         if (allRooms && allRooms.length > 0) {
-          // API 응답을 UI 형식에 맞게 변환
+          // Swagger 응답 형식에 맞게 UI 형식으로 변환
+          // Swagger 응답: { id, roomCode, meetingPoint, destination, meetingTime, capacity, status, memberCount, leaderId }
           const formattedRooms = allRooms.map(room => {
-            console.log('방 데이터 변환:', room);
+            console.log('방 데이터 변환 (Swagger 형식):', room);
             // 기존 availableRooms에서 같은 방을 찾아서 invite_code_enabled 값 유지
             const existingRoom = availableRooms.find(r => r.room_id === room.id);
-            const isPublicValue = room.isPublic !== undefined 
-              ? room.isPublic 
-              : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true); // 백엔드 응답 또는 기존 값, 없으면 기본값 true
-            console.log(`방 ${room.id}의 isPublic 값:`, isPublicValue, '원본:', room.isPublic);
+            
             return {
-              room_id: room.id,
-              roomCode: room.roomCode,
-              departure: room.meetingPoint,
-              destination: room.destination,
-              max_members: room.capacity,
-              current_count: room.memberCount,
-              host_id: room.leaderId,
-              status: room.status,
-              invite_code: room.roomCode,
+              room_id: room.id, // Swagger: id
+              roomCode: room.roomCode, // Swagger: roomCode
+              departure: room.meetingPoint, // Swagger: meetingPoint
+              destination: room.destination, // Swagger: destination
+              max_members: room.capacity, // Swagger: capacity
+              current_count: room.memberCount, // Swagger: memberCount
+              host_id: room.leaderId, // Swagger: leaderId
+              status: room.status, // Swagger: status
+              invite_code: room.roomCode, // roomCode를 invite_code로도 사용
               invite_code_enabled: room.invite_code_enabled !== undefined 
                 ? room.invite_code_enabled 
-                : (existingRoom?.invite_code_enabled !== undefined ? existingRoom.invite_code_enabled : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
-              meetingTime: room.meetingTime,
+                : (existingRoom?.invite_code_enabled !== undefined ? existingRoom.invite_code_enabled : false), // 기본값 false (초대코드 필요)
+              meetingTime: room.meetingTime, // Swagger: meetingTime
               time: new Date(room.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-              isPublic: isPublicValue,
+              isPublic: room.isPublic !== undefined 
+                ? room.isPublic 
+                : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true), // 기본값 true (공개 방)
             };
           });
           // 참여중인 방은 제외 (나머지는 모두 표시)
@@ -283,7 +318,16 @@ const TaxiScreen = ({ navigation }) => {
   const handleRefreshRooms = async () => {
     try {
       // 내가 참여중인 방 목록 새로고침
-      const myRooms = await getMyRooms();
+      let myRooms = [];
+      try {
+        myRooms = await getMyRooms();
+      } catch (error) {
+        // 에러 발생 시 조용히 처리 (콘솔 에러 로그 제거)
+        // console.error('방 목록 새로고침 실패:', error);
+        // 에러 발생 시 빈 배열로 처리
+        myRooms = [];
+      }
+      
       if (myRooms && Array.isArray(myRooms) && myRooms.length > 0) {
         // 백엔드에서 받은 데이터를 우선 사용 (나간 방은 백엔드에서 제거되므로)
         const formattedRooms = myRooms.map(room => {
@@ -296,7 +340,7 @@ const TaxiScreen = ({ navigation }) => {
             current_count: room.memberCount,
             host_id: room.leaderId,
             status: room.status,
-            invite_code: room.roomCode,
+            invite_code: room.roomCode || room.invite_code, // roomCode를 invite_code로도 사용
             invite_code_enabled: room.invite_code_enabled !== undefined ? room.invite_code_enabled : true, // 백엔드 응답 또는 기본값 true
             meetingTime: room.meetingTime,
             time: new Date(room.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
@@ -322,25 +366,29 @@ const TaxiScreen = ({ navigation }) => {
       const allRooms = await getRooms();
       console.log('새로고침 - 전체 방 목록 API 응답:', allRooms);
       if (allRooms && Array.isArray(allRooms) && allRooms.length > 0) {
+        // Swagger 응답 형식에 맞게 UI 형식으로 변환
         const formattedRooms = allRooms.map(room => {
           // 기존 availableRooms에서 같은 방을 찾아서 invite_code_enabled 값 유지
           const existingRoom = availableRooms.find(r => r.room_id === room.id);
+          
           return {
-            room_id: room.id,
-            roomCode: room.roomCode,
-            departure: room.meetingPoint,
-            destination: room.destination,
-            max_members: room.capacity,
-            current_count: room.memberCount,
-            host_id: room.leaderId,
-            status: room.status,
-            invite_code: room.roomCode,
+            room_id: room.id, // Swagger: id
+            roomCode: room.roomCode, // Swagger: roomCode
+            departure: room.meetingPoint, // Swagger: meetingPoint
+            destination: room.destination, // Swagger: destination
+            max_members: room.capacity, // Swagger: capacity
+            current_count: room.memberCount, // Swagger: memberCount
+            host_id: room.leaderId, // Swagger: leaderId
+            status: room.status, // Swagger: status
+            invite_code: room.roomCode, // roomCode를 invite_code로도 사용
             invite_code_enabled: room.invite_code_enabled !== undefined 
               ? room.invite_code_enabled 
-              : (existingRoom?.invite_code_enabled !== undefined ? existingRoom.invite_code_enabled : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
-            meetingTime: room.meetingTime,
+              : (existingRoom?.invite_code_enabled !== undefined ? existingRoom.invite_code_enabled : false), // 기본값 false
+            meetingTime: room.meetingTime, // Swagger: meetingTime
             time: new Date(room.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-            isPublic: room.isPublic !== undefined ? room.isPublic : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
+            isPublic: room.isPublic !== undefined 
+              ? room.isPublic 
+              : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true), // 기본값 true
           };
         });
         // 참여중인 방만 제외 (나머지는 모두 표시)
@@ -433,13 +481,20 @@ const TaxiScreen = ({ navigation }) => {
             isPublic: true,
           };
           
-          // 참여중인 채팅방 목록에 추가
+          // 참여중인 채팅방 목록에 추가 및 AsyncStorage에 저장
           setParticipatingRooms((prev) => {
             const exists = prev.some((r) => r.room_id === updatedRoomData.room_id);
             if (exists) {
-              return prev.map((r) => r.room_id === updatedRoomData.room_id ? updatedRoomData : r);
+              // 이미 있으면 업데이트
+              const updated = prev.map((r) => r.room_id === updatedRoomData.room_id ? updatedRoomData : r);
+              // AsyncStorage에도 저장
+              saveParticipatingRooms(updated).catch(err => console.error('AsyncStorage 저장 실패:', err));
+              return updated;
             }
-            return [...prev, updatedRoomData];
+            const newList = [...prev, updatedRoomData];
+            // AsyncStorage에도 저장
+            saveParticipatingRooms(newList).catch(err => console.error('AsyncStorage 저장 실패:', err));
+            return newList;
           });
           
           // 채팅방으로 이동
@@ -492,8 +547,10 @@ const TaxiScreen = ({ navigation }) => {
         current_count: response.memberCount || (roomData.current_count || 0) + 1,
         host_id: response.leaderId || roomData.host_id,
         status: response.status || roomData.status,
-        invite_code: response.roomCode || roomCode,
-        invite_code_enabled: roomData.invite_code_enabled !== false,
+        invite_code: response.roomCode || roomData.invite_code || roomCode, // roomCode를 invite_code로도 사용
+        invite_code_enabled: response.invite_code_enabled !== undefined 
+          ? response.invite_code_enabled 
+          : (roomData.invite_code_enabled !== undefined ? roomData.invite_code_enabled : true),
         meetingTime: response.meetingTime || roomData.meetingTime,
         time: response.meetingTime 
           ? new Date(response.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -501,14 +558,20 @@ const TaxiScreen = ({ navigation }) => {
         isPublic: roomData.isPublic !== false,
       };
       
-      // 참여중인 채팅방 목록에 추가
+      // 참여중인 채팅방 목록에 추가 및 AsyncStorage에 저장
       setParticipatingRooms((prev) => {
         const exists = prev.some((r) => r.room_id === updatedRoomData.room_id);
         if (exists) {
           // 이미 있으면 업데이트
-          return prev.map((r) => r.room_id === updatedRoomData.room_id ? updatedRoomData : r);
+          const updated = prev.map((r) => r.room_id === updatedRoomData.room_id ? updatedRoomData : r);
+          // AsyncStorage에도 저장
+          saveParticipatingRooms(updated).catch(err => console.error('AsyncStorage 저장 실패:', err));
+          return updated;
         }
-        return [...prev, updatedRoomData];
+        const newList = [...prev, updatedRoomData];
+        // AsyncStorage에도 저장
+        saveParticipatingRooms(newList).catch(err => console.error('AsyncStorage 저장 실패:', err));
+        return newList;
       });
       
       // 모달이 닫힌 후 네비게이션 (약간의 지연을 두어 모달이 완전히 닫힌 후 이동)
@@ -584,22 +647,21 @@ const TaxiScreen = ({ navigation }) => {
         </View>
 
         {/* 참여중인 채팅방과 방 목록 헤더를 하나의 박스로 묶기 */}
-        {participatingRooms.length > 0 && (
-          <View style={styles.participatingRoomsContainer}>
-            {/* 참여중인 채팅방 섹션 */}
-            <View style={styles.section}>
-              <View style={styles.participatingRoomsHeader}>
-                <Text style={styles.participatingRoomsTitle}>참여중인 채팅방</Text>
-                <TouchableOpacity 
-                  style={styles.smallRefreshButton}
-                  onPress={handleRefreshRooms}
-                >
-                  <MaterialIcons name="refresh" size={16} color="#999" />
-                </TouchableOpacity>
-              </View>
-              
-              {/* 채팅방 목록 헤더 */}
-              <View style={styles.listHeader}>
+        <View style={styles.participatingRoomsContainer}>
+          {/* 참여중인 채팅방 섹션 */}
+          <View style={styles.section}>
+            <View style={styles.participatingRoomsHeader}>
+              <Text style={styles.participatingRoomsTitle}>참여중인 채팅방</Text>
+              <TouchableOpacity 
+                style={styles.smallRefreshButton}
+                onPress={handleRefreshRooms}
+              >
+                <MaterialIcons name="refresh" size={16} color="#999" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* 채팅방 목록 헤더 */}
+            <View style={styles.listHeader}>
                 <View style={styles.roomListColumn}>
                   <Text style={styles.listHeaderText}>방 번호</Text>
                 </View>
@@ -617,92 +679,97 @@ const TaxiScreen = ({ navigation }) => {
               </View>
               
               {/* 참여중인 채팅방 방 정보들 */}
-              {participatingRooms.map((room) => {
-                const currentCount = room.current_count || 0;
-                const maxMembers = room.max_members || 4; // 방 생성 시 설정한 인원 수
-                return (
-                <View key={room.room_id} style={styles.roomItem}>
-                  <TouchableOpacity 
-                    style={styles.roomItemContent}
-                    onPress={() => handleEnterRoom(room)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.roomListColumn}>
-                      <View style={styles.roomNumberWithLock}>
-                        <Text style={styles.roomNumberText}>{room.room_id}</Text>
-                        {(room.isPublic === false || room.invite_code_enabled) && (
-                          <LockIcon size={10} />
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.roomListColumn}>
-                    <View style={styles.destinationContainer}>
-                      <Text 
-                        style={styles.destinationText}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
+              {participatingRooms.length > 0 ? (
+                participatingRooms.map((room) => {
+                  const currentCount = room.current_count || 0;
+                  const maxMembers = room.max_members || 4; // 방 생성 시 설정한 인원 수
+                  return (
+                    <View key={room.room_id} style={styles.roomItem}>
+                      <TouchableOpacity 
+                        style={styles.roomItemContent}
+                        onPress={() => handleEnterRoom(room)}
+                        activeOpacity={0.7}
                       >
-                        {room.departure || '출발지'}
-                      </Text>
-                      <View style={styles.destinationRow}>
-                        <Text style={styles.arrowText}>→</Text>
-                        <Text 
-                          style={styles.destinationText}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {room.destination || '도착지'}
-                        </Text>
-                      </View>
-                      </View>
-                    </View>
-                    <View style={styles.roomListColumn}>
-                    <Text style={styles.roomItemText}>{room.time || ''}</Text>
-                    </View>
-                    <View style={styles.roomListColumn}>
-                      <View style={styles.memberCounterWrapper}>
-                        <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                  <View style={[styles.roomListColumn, { alignItems: 'flex-end', flex: 0, width: 40 }]}>
-                    <TouchableOpacity 
-                      style={styles.iconButton}
-                      onPress={async () => {
-                        Alert.alert(
-                          '채팅방 나가기',
-                          '채팅방을 나가시겠습니까?',
-                          [
-                            { text: '취소', style: 'cancel' },
-                            { 
-                              text: '나가기', 
-                              style: 'destructive',
-                              onPress: async () => {
-                                try {
-                                  const roomCode = room.roomCode || room.invite_code || room.room_id?.toString();
-                                  if (roomCode) {
-                                    await leaveRoom(roomCode);
+                        <View style={styles.roomListColumn}>
+                          <View style={styles.roomNumberWithLock}>
+                            <Text style={styles.roomNumberText}>{room.room_id}</Text>
+                            {(room.isPublic === false || room.invite_code_enabled) && (
+                              <LockIcon size={10} />
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.roomListColumn}>
+                          <View style={styles.destinationContainer}>
+                            <Text 
+                              style={styles.destinationText}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {room.departure || '출발지'}
+                            </Text>
+                            <View style={styles.destinationRow}>
+                              <Text style={styles.arrowText}>→</Text>
+                              <Text 
+                                style={styles.destinationText}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                              >
+                                {room.destination || '도착지'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                        <View style={styles.roomListColumn}>
+                          <Text style={styles.roomItemText}>{room.time || ''}</Text>
+                        </View>
+                        <View style={styles.roomListColumn}>
+                          <View style={styles.memberCounterWrapper}>
+                            <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                      <View style={[styles.roomListColumn, { alignItems: 'flex-end', flex: 0, width: 40 }]}>
+                        <TouchableOpacity 
+                          style={styles.iconButton}
+                          onPress={async () => {
+                            Alert.alert(
+                              '채팅방 나가기',
+                              '채팅방을 나가시겠습니까?',
+                              [
+                                { text: '취소', style: 'cancel' },
+                                { 
+                                  text: '나가기', 
+                                  style: 'destructive',
+                                  onPress: async () => {
+                                    try {
+                                      const roomCode = room.roomCode || room.invite_code || room.room_id?.toString();
+                                      if (roomCode) {
+                                        await leaveRoom(roomCode);
+                                      }
+                                      handleLeaveRoomFromChat(room.room_id);
+                                    } catch (error) {
+                                      console.error('방 나가기 에러:', error);
+                                      Alert.alert('오류', error.message || '방 나가기에 실패했습니다.');
+                                    }
                                   }
-                                  handleLeaveRoomFromChat(room.room_id);
-                                } catch (error) {
-                                  console.error('방 나가기 에러:', error);
-                                  Alert.alert('오류', error.message || '방 나가기에 실패했습니다.');
-                                }
-                              }
-                            },
-                          ]
-                        );
-                      }}
-                    >
-                      <MaterialIcons name="close" size={16} color="#333" />
-                    </TouchableOpacity>
-                  </View>
+                                },
+                              ]
+                            );
+                          }}
+                        >
+                          <MaterialIcons name="close" size={16} color="#333" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={styles.emptyRoomsContainer}>
+                  <Text style={styles.emptyRoomsText}>참여중인 채팅방이 없습니다.</Text>
                 </View>
-                );
-              })}
+              )}
             </View>
           </View>
-        )}
 
         {/* 방 목록 섹션 - 항상 표시 */}
         <View style={styles.availableRoomsContainer}>
@@ -844,18 +911,29 @@ const TaxiScreen = ({ navigation }) => {
                             current_count: response.memberCount || (room.current_count || 0) + 1,
                             host_id: response.leaderId || room.host_id,
                             status: response.status || room.status,
-                            invite_code: response.roomCode,
-                            invite_code_enabled: room.invite_code_enabled,
+            invite_code: response.roomCode || room.invite_code || roomCode, // roomCode를 invite_code로도 사용
+            invite_code_enabled: response.invite_code_enabled !== undefined 
+              ? response.invite_code_enabled 
+              : (room.invite_code_enabled !== undefined ? room.invite_code_enabled : true),
                             meetingTime: response.meetingTime || room.meetingTime,
                             time: room.time || new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
                             isPublic: room.isPublic,
                           };
                           
-                          // 참여중인 채팅방 목록에 추가
+                          // 참여중인 채팅방 목록에 추가 및 AsyncStorage에 저장
                           setParticipatingRooms((prev) => {
                             const exists = prev.some((r) => r.room_id === updatedRoomData.room_id);
-                            if (exists) return prev;
-                            return [...prev, updatedRoomData];
+                            if (exists) {
+                              // 이미 있으면 업데이트
+                              const updated = prev.map(r => r.room_id === updatedRoomData.room_id ? updatedRoomData : r);
+                              // AsyncStorage에도 저장
+                              saveParticipatingRooms(updated).catch(err => console.error('AsyncStorage 저장 실패:', err));
+                              return updated;
+                            }
+                            const newList = [...prev, updatedRoomData];
+                            // AsyncStorage에도 저장
+                            saveParticipatingRooms(newList).catch(err => console.error('AsyncStorage 저장 실패:', err));
+                            return newList;
                           });
                           
                           // 채팅방으로 이동

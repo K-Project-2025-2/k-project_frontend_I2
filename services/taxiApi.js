@@ -62,16 +62,21 @@ export const getMyRooms = async () => {
       // 배열로 반환
       return Array.isArray(data) ? data : [];
     } else {
-      throw new Error('내 방 목록 조회 실패');
+      // 에러 발생 시 빈 배열 반환 (에러를 throw하지 않음)
+      const errorText = await response.text().catch(() => '');
+      console.log('내 방 목록 조회 실패:', response.status, errorText);
+      return [];
     }
   } catch (error) {
-    console.error('내 방 목록 조회 에러:', error);
-    throw error;
+    // 네트워크 에러나 기타 에러 발생 시 빈 배열 반환 (에러를 throw하지 않음)
+    // console.error('내 방 목록 조회 에러:', error);
+    return [];
   }
 };
 
 // 방 목록 조회 (전체 공개 방 목록 - Swagger에 없지만 필요시 사용)
 // ⚠️ Swagger에 없는 API - 백엔드에 추가 요청 필요
+// 모든 택시 방 목록 조회 (Swagger: GET /api/taxi/rooms)
 export const getRooms = async () => {
   try {
     const headers = await getAuthHeaders();
@@ -85,11 +90,18 @@ export const getRooms = async () => {
     if (response.status === 200) {
       const data = await response.json();
       console.log('getRooms 응답 데이터:', JSON.stringify(data, null, 2));
-      const rooms = Array.isArray(data) ? data : (data.rooms || data.data || []);
-      console.log('getRooms 반환할 방 개수:', rooms.length);
-      return rooms;
+      
+      // Swagger 명세에 따르면 배열로 반환됨
+      if (Array.isArray(data)) {
+        console.log('getRooms 반환할 방 개수:', data.length);
+        return data;
+      } else {
+        // 혹시 객체로 감싸져 있을 경우 처리
+        const rooms = data.rooms || data.data || [];
+        console.log('getRooms 반환할 방 개수:', rooms.length);
+        return Array.isArray(rooms) ? rooms : [];
+      }
     } else {
-      // API가 없으면 빈 배열 반환
       const errorText = await response.text();
       console.log('getRooms 응답 에러:', response.status, errorText);
       return [];
@@ -97,33 +109,36 @@ export const getRooms = async () => {
   } catch (error) {
     console.error('전체 방 목록 조회 실패:', error);
     console.error('에러 상세:', error.message, error.stack);
-    // API가 없어도 에러를 던지지 않고 빈 배열 반환
     return [];
   }
 };
 
 // 특정 방 정보 조회
 // ⚠️ Swagger에 없는 API - 백엔드에 추가 요청 필요
-export const getRoomDetail = async (roomId) => {
+// 에러 발생 시 null을 반환하여 앱이 중단되지 않도록 처리
+export const getRoomDetail = async (roomCode) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomId}`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
       return data.data || data;
     } else if (response.status === 404) {
-      throw new Error('Room not found');
+      console.log('방 정보 조회: 방을 찾을 수 없습니다.');
+      return null;
     } else {
-      throw new Error('방 정보 조회 실패');
+      const errorText = await response.text().catch(() => '');
+      console.log('방 정보 조회 실패:', response.status, errorText);
+      return null;
     }
   } catch (error) {
-    console.error('방 정보 조회 에러:', error);
-    throw error;
+    // 네트워크 에러나 기타 에러 발생 시 null 반환 (에러 로그는 출력하지 않음)
+    // console.error('방 정보 조회 에러:', error);
+    return null;
   }
 };
 
@@ -338,32 +353,7 @@ export const acceptOperation = async (roomCode) => {
   }
 };
 
-// 운행 수락 상태 조회 API
-// ✅ Swagger: GET /api/taxi/rooms/{roomCode}/operation/status
-export const getOperationStatus = async (roomCode) => {
-  try {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/operation/status`, {
-      method: 'GET',
-      headers,
-    });
 
-    if (response.status === 200) {
-      const data = await response.json();
-      return data;
-    } else if (response.status === 404) {
-      throw new Error('Room not found');
-    } else {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '운행 상태 조회 실패');
-    }
-  } catch (error) {
-    console.error('운행 상태 조회 에러:', error);
-    throw error;
-  }
-};
-
-// 운행 출발 확정 API (운행 종료)
 // ✅ Swagger: POST /api/taxi/rooms/{roomCode}/operation/end
 export const endOperation = async (roomCode) => {
   try {
