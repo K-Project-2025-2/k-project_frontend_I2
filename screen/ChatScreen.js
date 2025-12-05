@@ -154,10 +154,16 @@ const ChatScreen = ({ navigation, route }) => {
   }, [roomData?.room_id, roomData?.current_count, isFromCreate]);
   
   // 채팅방 입장 시 메시지 조회 및 Polling 설정
-  // 메시지에서 운행 시작 상태 복원 (모든 사용자, 메시지 로드 후)
+  // 메시지에서 운행 시작 상태 복원 (방장이 아닌 사용자만, 메시지 로드 후)
+  // 방장은 실제로 버튼을 누르기 전까지는 버튼이 계속 표시되어야 함
   // 실제로 운행이 시작된 메시지인지 확인 (메시지 내용이 "운행이 시작되었습니다."인 경우만)
   useEffect(() => {
     if (messages.length === 0) return;
+    
+    // 방장인 경우 메시지에서 상태를 복원하지 않음 (버튼이 계속 표시되도록)
+    if (isHost) {
+      return;
+    }
     
     const hasOperationStarted = messages.some(msg => 
       (msg.type === 'operation_started' || msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
@@ -165,10 +171,10 @@ const ChatScreen = ({ navigation, route }) => {
     
     // 운행이 시작되었으면 상태 복원 (아직 시작하지 않았을 때만)
     if (hasOperationStarted && !isOperationStarted) {
-      console.log('메시지에서 운행 시작 상태 복원 (모든 사용자)');
+      console.log('메시지에서 운행 시작 상태 복원 (방장이 아닌 사용자)');
       setIsOperationStarted(true);
     }
-  }, [messages, isOperationStarted]);
+  }, [messages, isOperationStarted, isHost]);
 
   useEffect(() => {
     if (!roomData?.room_id) return;
@@ -340,11 +346,12 @@ const ChatScreen = ({ navigation, route }) => {
               }
               
               // 운행 시작 메시지가 새로 추가되었는지 확인 (실제 운행 시작 메시지인지 확인)
+              // 방장인 경우는 상태를 업데이트하지 않음 (버튼이 계속 표시되도록)
               const hasNewOperationStarted = uniqueNewMessages.some(msg => 
                 (msg.type === 'operation_started' || msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
               );
-              if (hasNewOperationStarted) {
-                console.log('Polling: 새로운 운행 시작 메시지 감지, 상태 업데이트');
+              if (hasNewOperationStarted && !isHost) {
+                console.log('Polling: 새로운 운행 시작 메시지 감지, 상태 업데이트 (방장이 아닌 사용자)');
                 setIsOperationStarted(true);
               }
               
@@ -358,12 +365,13 @@ const ChatScreen = ({ navigation, route }) => {
             } else {
               // 새 메시지는 없지만, 기존 메시지에서 운행 시작 상태 확인 (메시지가 업데이트되었을 수 있음)
               // 실제 운행 시작 메시지인지 확인
+              // 방장인 경우는 상태를 업데이트하지 않음 (버튼이 계속 표시되도록)
               const hasOperationStarted = formattedMessages.some(msg => 
                 (msg.type === 'operation_started' || msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
               );
               
-              if (hasOperationStarted && !isOperationStarted) {
-                console.log('Polling: 기존 메시지에서 운행 시작 발견, 상태 업데이트');
+              if (hasOperationStarted && !isOperationStarted && !isHost) {
+                console.log('Polling: 기존 메시지에서 운행 시작 발견, 상태 업데이트 (방장이 아닌 사용자)');
                 setIsOperationStarted(true);
               }
             }
@@ -380,7 +388,7 @@ const ChatScreen = ({ navigation, route }) => {
         clearInterval(messagePollingInterval);
       }
     };
-  }, [roomData?.room_id, roomData?.roomCode, isFromCreate]);
+  }, [roomData?.room_id, roomData?.roomCode, isFromCreate, isHost, isOperationStarted]);
 
   // 방 정보 실시간 업데이트 Polling (3초마다)
   useEffect(() => {
@@ -1069,10 +1077,17 @@ const ChatScreen = ({ navigation, route }) => {
       return;
     }
 
-    // 운행 시작 후 나가기 불가 (모든 사용자)
-    if (isOperationStarted) {
-      Alert.alert('알림', '운행이 시작되어 나갈 수 없습니다.');
-      return;
+    // 방장인 경우, 방에 인원이 1명만 남았으면 퇴장 가능
+    // memberCount와 current_count 모두 확인 (백엔드 응답 형식에 따라 다를 수 있음)
+    const currentCount = roomData?.memberCount || roomData?.current_count || 1;
+    if (isHost && currentCount === 1) {
+      // 방장 혼자 남았으면 퇴장 가능 (운행 시작 여부와 관계없이)
+    } else {
+      // 운행 시작 후 나가기 불가 (모든 사용자, 단 방장 혼자 남은 경우 제외)
+      if (isOperationStarted) {
+        Alert.alert('알림', '운행이 시작되어 나갈 수 없습니다.');
+        return;
+      }
     }
 
     // 운행 수락 후 정산 완료 후 송금 완료 전까지 나가기 불가
@@ -1101,12 +1116,108 @@ const ChatScreen = ({ navigation, route }) => {
     const performLeave = async () => {
       try {
         const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
+        
+        console.log('퇴장 시도 - isHost:', isHost, 'currentCount:', currentCount, 'roomData:', roomData);
+        
+        // 방장인 경우, 최신 방 정보를 가져와서 인원 수 확인
+        if (isHost) {
+          try {
+            const latestRoomInfo = await getRoomDetail(roomCode);
+            const latestMemberCount = latestRoomInfo?.memberCount || latestRoomInfo?.current_count || currentCount;
+            
+            console.log('최신 방 정보 조회 성공:', latestRoomInfo);
+            console.log('최신 인원 수:', latestMemberCount);
+            
+            // 방장이 혼자 남았을 때는 백엔드 API를 호출하지 않고 프론트엔드에서만 처리
+            if (latestMemberCount === 1) {
+              console.log('방장 혼자 남음 (최신 정보 확인), 백엔드 API 호출 없이 퇴장 처리');
+              if (onLeaveRoom) {
+                onLeaveRoom(roomData.room_id);
+              }
+              navigation.goBack();
+              return;
+            } else {
+              console.log('방장이지만 인원이 1명이 아님:', latestMemberCount);
+            }
+          } catch (infoError) {
+            // 방 정보 조회 실패 시 기존 로직 사용
+            console.log('방 정보 조회 실패, 기존 로직 사용:', infoError.message);
+            if (currentCount === 1) {
+              console.log('방장 혼자 남음 (기존 정보 기준), 백엔드 API 호출 없이 퇴장 처리');
+              if (onLeaveRoom) {
+                onLeaveRoom(roomData.room_id);
+              }
+              navigation.goBack();
+              return;
+            }
+          }
+        }
+        
+        console.log('백엔드 API 호출 시도...');
         await leaveRoom(roomCode); // 백엔드 API 호출
         if (onLeaveRoom) {
           onLeaveRoom(roomData.room_id);
         }
         navigation.goBack();
       } catch (error) {
+        console.log('퇴장 에러 발생:', error.message);
+        console.log('에러 상세:', error);
+        
+        // "방장은 퇴장할 수 없습니다" 에러인 경우, 방장이고 인원이 1명이면 무조건 퇴장 처리
+        if (error.message && error.message.includes('방장은 퇴장할 수 없습니다') && isHost) {
+          console.log('방장 퇴장 에러 발생, 인원 수 확인 중...');
+          console.log('현재 roomData:', roomData);
+          console.log('현재 currentCount:', currentCount);
+          
+          // 최신 방 정보 확인 시도
+          let shouldLeave = false;
+          let latestMemberCount = null;
+          
+          try {
+            const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
+            const latestRoomInfo = await getRoomDetail(roomCode);
+            
+            console.log('최신 방 정보 조회 결과:', latestRoomInfo);
+            
+            if (latestRoomInfo) {
+              // memberCount와 current_count 모두 확인
+              latestMemberCount = latestRoomInfo.memberCount !== undefined ? latestRoomInfo.memberCount 
+                : (latestRoomInfo.current_count !== undefined ? latestRoomInfo.current_count : null);
+              
+              console.log('최신 인원 수:', latestMemberCount);
+              
+              if (latestMemberCount === 1) {
+                shouldLeave = true;
+                console.log('방장 혼자 남음 (에러 후 재확인), 퇴장 처리');
+              }
+            } else {
+              console.log('최신 방 정보가 null, 기존 정보로 판단');
+            }
+          } catch (infoError) {
+            console.log('방 정보 조회 실패, 기존 정보로 판단:', infoError.message);
+          }
+          
+          // 최신 정보가 없거나 확인 실패 시 기존 정보로 판단
+          if (!shouldLeave && (currentCount === 1 || roomData?.memberCount === 1)) {
+            shouldLeave = true;
+            console.log('방장 혼자 남음 (기존 정보 기준), 퇴장 처리');
+          }
+          
+          // 인원이 1명이면 무조건 퇴장 처리 (백엔드 제약 무시)
+          if (shouldLeave) {
+            console.log('방장 혼자 남음 확인, 퇴장 처리 실행');
+            if (onLeaveRoom) {
+              onLeaveRoom(roomData.room_id);
+            }
+            navigation.goBack();
+            return;
+          }
+          
+          // 인원이 1명이 아니면 에러 표시
+          console.log('방장이지만 인원이 1명이 아님, 퇴장 불가');
+          Alert.alert('알림', '방에 다른 참여자가 있어 방장은 퇴장할 수 없습니다.');
+          return;
+        }
         Alert.alert('오류', error.message || '방 나가기에 실패했습니다.');
       }
     };
@@ -1435,17 +1546,19 @@ const ChatScreen = ({ navigation, route }) => {
               <TouchableOpacity 
                 style={[
                   styles.actionButton,
-                  isOperationStarted ? styles.actionButtonDisabled : null
+                  // 방장 혼자 남은 경우가 아니고 운행이 시작되었으면 비활성화
+                  (isOperationStarted && !(isHost && (roomData?.current_count || 1) === 1)) ? styles.actionButtonDisabled : null
                 ]} 
                 onPress={() => {
                   setShowActionButtons(false);
                   handleLeaveRoom();
                 }}
-                disabled={isOperationStarted}
+                disabled={isOperationStarted && !(isHost && (roomData?.current_count || 1) === 1)}
               >
                 <Text style={[
                   styles.actionButtonText,
-                  isOperationStarted ? styles.actionButtonTextDisabled : null
+                  // 방장 혼자 남은 경우가 아니고 운행이 시작되었으면 비활성화 스타일
+                  (isOperationStarted && !(isHost && (roomData?.current_count || 1) === 1)) ? styles.actionButtonTextDisabled : null
                 ]}>채팅방 나가기</Text>
             </TouchableOpacity>
               </View>
@@ -1619,7 +1732,7 @@ const styles = StyleSheet.create({
   },
   // 메시지 컨테이너 (사용자 이름 + 버블)
   messageContainer: {
-    marginBottom: 12,
+    marginBottom: 6,
     maxWidth: '80%',
   },
   // 자신의 메시지 컨테이너 (오른쪽 정렬)
@@ -1636,7 +1749,7 @@ const styles = StyleSheet.create({
   messageBubble: {
     padding: 12,
     borderRadius: 12,
-    marginTop: 4,
+    marginTop: 2,
   },
   // 자신의 메시지 버블 (파란색)
   myMessageBubble: {
