@@ -101,6 +101,7 @@ const TaxiScreen = ({ navigation }) => {
       // 전체 방 목록 가져오기 (공개 방 목록)
       try {
         const allRooms = await getRooms();
+        console.log('전체 방 목록 API 응답:', allRooms);
         if (allRooms && allRooms.length > 0) {
           // API 응답을 UI 형식에 맞게 변환
           const formattedRooms = allRooms.map(room => {
@@ -124,13 +125,21 @@ const TaxiScreen = ({ navigation }) => {
               isPublic: room.isPublic !== undefined ? room.isPublic : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
             };
           });
-          setAvailableRooms(formattedRooms);
+          // 참여중인 방은 제외하고, 공개 방만 표시
+          // 참고: participatingRooms는 비동기로 로드되므로, 여기서는 formattedRooms만 필터링
+          const filteredRooms = formattedRooms.filter(room => {
+            // 공개 방만 표시 (isPublic이 false가 아닌 방)
+            return room.isPublic !== false;
+          });
+          console.log('필터링된 참여 가능한 방 목록:', filteredRooms);
+          setAvailableRooms(filteredRooms);
         } else {
           // API가 없거나 빈 배열이면 빈 배열로 설정
+          console.log('전체 방 목록이 비어있음');
           setAvailableRooms([]);
         }
       } catch (error) {
-        console.log('전체 방 목록 조회 실패:', error.message);
+        console.error('전체 방 목록 조회 실패:', error);
         // 에러 발생 시 빈 배열로 설정
         setAvailableRooms([]);
       }
@@ -138,6 +147,16 @@ const TaxiScreen = ({ navigation }) => {
     
     loadRooms();
   }, []);
+
+  // 참여중인 방이 변경되면 availableRooms에서 제외
+  useEffect(() => {
+    if (participatingRooms.length > 0) {
+      setAvailableRooms(prev => {
+        const participatingRoomIds = participatingRooms.map(r => r.room_id);
+        return prev.filter(room => !participatingRoomIds.includes(room.room_id));
+      });
+    }
+  }, [participatingRooms]);
 
   // 참여중인 채팅방 목록이 변경될 때마다 AsyncStorage에 저장
   useEffect(() => {
@@ -293,6 +312,7 @@ const TaxiScreen = ({ navigation }) => {
       
       // 전체 방 목록 새로고침
       const allRooms = await getRooms();
+      console.log('새로고침 - 전체 방 목록 API 응답:', allRooms);
       if (allRooms && Array.isArray(allRooms) && allRooms.length > 0) {
         const formattedRooms = allRooms.map(room => {
           // 기존 availableRooms에서 같은 방을 찾아서 invite_code_enabled 값 유지
@@ -315,9 +335,21 @@ const TaxiScreen = ({ navigation }) => {
             isPublic: room.isPublic !== undefined ? room.isPublic : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
           };
         });
-        setAvailableRooms(formattedRooms);
+        // 참여중인 방은 제외하고, 공개 방만 표시
+        const participatingRoomIds = participatingRooms.map(r => r.room_id);
+        const filteredRooms = formattedRooms.filter(room => {
+          // 참여중인 방은 제외
+          if (participatingRoomIds.includes(room.room_id)) {
+            return false;
+          }
+          // 공개 방만 표시 (isPublic이 false가 아닌 방)
+          return room.isPublic !== false;
+        });
+        console.log('새로고침 - 필터링된 참여 가능한 방 목록:', filteredRooms);
+        setAvailableRooms(filteredRooms);
       } else {
         // API가 없거나 빈 배열이면 빈 배열로 설정
+        console.log('새로고침 - 전체 방 목록이 비어있음');
         setAvailableRooms([]);
       }
     } catch (error) {

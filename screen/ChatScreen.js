@@ -157,6 +157,26 @@ const ChatScreen = ({ navigation, route }) => {
   }, [roomData?.room_id, roomData?.current_count, isFromCreate]);
   
   // 채팅방 입장 시 메시지 조회 및 Polling 설정
+  // 메시지에서 운행 시작 상태 복원 (모든 사용자, 메시지 로드 후)
+  useEffect(() => {
+    if (messages.length === 0) return;
+    
+    const hasOperationStartRequest = messages.some(msg => msg.type === 'operation_start');
+    const hasOperationStarted = messages.some(msg => msg.type === 'operation_started');
+    
+    // 운행 시작 요청이 있으면 상태 복원 (아직 요청하지 않았을 때만)
+    if (hasOperationStartRequest && !isOperationRequested) {
+      console.log('메시지에서 운행 시작 요청 상태 복원 (모든 사용자)');
+      setIsOperationRequested(true);
+    }
+    
+    // 운행이 시작되었으면 상태 복원 (아직 시작하지 않았을 때만)
+    if (hasOperationStarted && !isOperationStarted) {
+      console.log('메시지에서 운행 시작 상태 복원 (모든 사용자)');
+      setIsOperationStarted(true);
+    }
+  }, [messages, isOperationRequested, isOperationStarted]);
+
   useEffect(() => {
     if (!roomData?.room_id) return;
 
@@ -210,6 +230,7 @@ const ChatScreen = ({ navigation, route }) => {
               message: msg.content || msg.message,
               created_at: msg.createdAt || msg.created_at || new Date().toISOString(),
               time: new Date(msg.createdAt || msg.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+              type: msg.type || null, // 메시지 타입 유지
             };
           }));
           // 시간순으로 정렬
@@ -310,6 +331,7 @@ const ChatScreen = ({ navigation, route }) => {
               message: msg.content || msg.message,
               created_at: msg.createdAt || msg.created_at || new Date().toISOString(),
               time: new Date(msg.createdAt || msg.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+              type: msg.type || null, // 메시지 타입 유지
             };
           }));
           
@@ -485,12 +507,22 @@ const ChatScreen = ({ navigation, route }) => {
   // myUserId는 useEffect에서 설정됨
   
   // 방장 판단: isFromCreate가 true이거나, leaderId가 현재 사용자 ID와 일치하는 경우
-  const isHost = isFromCreate === true || (roomData?.leaderId && myUserId && String(roomData.leaderId) === String(myUserId));
+  // host_id도 확인 (백엔드 응답에 따라 다를 수 있음)
+  const isHost = isFromCreate === true || 
+    (roomData?.leaderId && myUserId && String(roomData.leaderId) === String(myUserId)) ||
+    (roomData?.host_id && myUserId && String(roomData.host_id) === String(myUserId));
   
   // 디버깅용 로그 (개발 중에만 사용)
   useEffect(() => {
-    console.log('ChatScreen - isHost:', isHost, 'isFromCreate:', isFromCreate, 'roomData.host_id:', roomData?.host_id);
-  }, [isHost, isFromCreate, roomData?.host_id]);
+    console.log('ChatScreen - 방장 권한 체크:');
+    console.log('  isFromCreate:', isFromCreate);
+    console.log('  myUserId:', myUserId);
+    console.log('  roomData.leaderId:', roomData?.leaderId);
+    console.log('  roomData.host_id:', roomData?.host_id);
+    console.log('  isHost:', isHost);
+    console.log('  leaderId 매칭:', roomData?.leaderId && myUserId && String(roomData.leaderId) === String(myUserId));
+    console.log('  host_id 매칭:', roomData?.host_id && myUserId && String(roomData.host_id) === String(myUserId));
+  }, [isHost, isFromCreate, roomData?.host_id, roomData?.leaderId, myUserId]);
   
   // 방장을 제외한 참여자 수 계산
   const participantCount = Math.max(0, (roomData?.current_count || 1) - 1);
@@ -939,12 +971,8 @@ const ChatScreen = ({ navigation, route }) => {
     };
   }, [isOperationRequested, isOperationStarted, isDeparted, roomData?.room_id, roomData?.roomCode, myUserId]);
 
-  // 정산 전송 핸들러
+  // 정산 전송 핸들러 (모든 사용자 가능)
   const handleSettlementSubmit = async (settlementData) => {
-    if (!isHost) {
-      Alert.alert('알림', '방장만 정산을 생성할 수 있습니다.');
-      return;
-    }
     
     // 운행이 시작되지 않았으면 정산 불가
     const hasOperationStarted = messages.some(msg => 
