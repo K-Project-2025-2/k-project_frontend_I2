@@ -253,7 +253,7 @@ const MainScreen = ({ navigation }) => {
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton}>
-          <Text style={styles.headerButtonText}>KangnamBUS</Text>
+          <Text style={styles.headerButtonText}>Kangnam BUS</Text>
         </TouchableOpacity>
       </View>
 

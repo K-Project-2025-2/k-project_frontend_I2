@@ -564,13 +564,13 @@ const TaxiScreen = ({ navigation }) => {
                   <Text style={styles.listHeaderText}>방 번호</Text>
                 </View>
                 <View style={styles.roomListColumn}>
-                  <Text style={styles.listHeaderText}>목적지</Text>
+                  <Text style={[styles.listHeaderText, styles.listHeaderTextRight]}>목적지</Text>
                 </View>
                 <View style={styles.roomListColumn}>
-                  <Text style={styles.listHeaderText}>출발시간</Text>
+                  <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine]}>출발시간</Text>
                 </View>
                 <View style={styles.roomListColumn}>
-                  <Text style={styles.listHeaderText}>인원현황</Text>
+                  <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine, styles.listHeaderTextMostRight]}>인원현황</Text>
                 </View>
                 <View style={styles.roomListColumn}>
                 </View>
@@ -630,17 +630,26 @@ const TaxiScreen = ({ navigation }) => {
                   <View style={[styles.roomListColumn, { alignItems: 'flex-end', flex: 0, width: 40 }]}>
                     <TouchableOpacity 
                       style={styles.iconButton}
-                      onPress={() => {
+                      onPress={async () => {
                         Alert.alert(
                           '채팅방 나가기',
-                          '채팅방에서 나가시겠습니까? 목록에서도 제거됩니다.',
+                          '채팅방을 나가시겠습니까?',
                           [
                             { text: '취소', style: 'cancel' },
                             { 
                               text: '나가기', 
                               style: 'destructive',
-                              onPress: () => {
-                                handleLeaveRoomFromChat(room.room_id);
+                              onPress: async () => {
+                                try {
+                                  const roomCode = room.roomCode || room.invite_code || room.room_id?.toString();
+                                  if (roomCode) {
+                                    await leaveRoom(roomCode);
+                                  }
+                                  handleLeaveRoomFromChat(room.room_id);
+                                } catch (error) {
+                                  console.error('방 나가기 에러:', error);
+                                  Alert.alert('오류', error.message || '방 나가기에 실패했습니다.');
+                                }
                               }
                             },
                           ]
@@ -653,34 +662,6 @@ const TaxiScreen = ({ navigation }) => {
                 </View>
                 );
               })}
-            </View>
-          </View>
-        )}
-
-        {/* 방 목록 헤더 (참여중인 채팅방이 없을 때만 표시) */}
-        {participatingRooms.length === 0 && (
-          <View style={styles.roomsContainer}>
-            <View style={styles.listHeader}>
-              <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>방 번호</Text>
-              </View>
-              <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>목적지</Text>
-              </View>
-              <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>출발시간</Text>
-              </View>
-              <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>인원현황</Text>
-              </View>
-              <View style={styles.roomListColumn}>
-                <TouchableOpacity 
-                  style={styles.refreshButton}
-                  onPress={handleRefreshRooms}
-                >
-                  <MaterialIcons name="refresh" size={18} color="#fff" />
-                </TouchableOpacity>
-              </View>
             </View>
           </View>
         )}
@@ -702,13 +683,13 @@ const TaxiScreen = ({ navigation }) => {
                 <Text style={styles.listHeaderText}>방 번호</Text>
               </View>
               <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>목적지</Text>
+                <Text style={[styles.listHeaderText, styles.listHeaderTextRight]}>목적지</Text>
               </View>
               <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>출발시간</Text>
+                <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine]}>출발시간</Text>
               </View>
               <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>인원현황</Text>
+                <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine, styles.listHeaderTextMostRight]}>인원현황</Text>
               </View>
               <View style={styles.roomListColumn}>
               </View>
@@ -718,28 +699,30 @@ const TaxiScreen = ({ navigation }) => {
             const currentCount = room.current_count || 0;
             const maxMembers = room.max_members || 4; // 방 생성 시 설정한 인원 수
             return (
-              <View key={room.room_id} style={styles.roomListItem}>
+              <View key={room.room_id} style={styles.roomItem}>
                 <View style={styles.roomListColumn}>
                   <View style={styles.roomNumberWithLock}>
-                    <Text style={styles.roomListNumber}>{room.room_id}</Text>
+                    <Text style={styles.roomNumberText}>{room.room_id}</Text>
                     {(room.isPublic === false || room.invite_code_enabled) && (
-                      <LockIcon size={10} />
+                      <View style={{ marginLeft: 4 }}>
+                        <LockIcon size={10} />
+                      </View>
                     )}
                   </View>
                 </View>
                 <View style={styles.roomListColumn}>
-                  <View style={styles.roomListDestination}>
+                  <View style={styles.destinationContainer}>
                     <Text 
-                      style={styles.roomListDestinationText}
+                      style={styles.destinationText}
                       numberOfLines={1}
                       ellipsizeMode="tail"
                     >
                       {room.departure || '출발지'}
                     </Text>
                     <View style={styles.destinationRow}>
-                      <Text style={styles.roomListArrowText}>→</Text>
+                      <Text style={styles.arrowText}>→</Text>
                       <Text 
-                        style={styles.roomListDestinationText}
+                        style={styles.destinationText}
                         numberOfLines={1}
                         ellipsizeMode="tail"
                       >
@@ -749,10 +732,10 @@ const TaxiScreen = ({ navigation }) => {
                   </View>
                 </View>
                 <View style={styles.roomListColumn}>
-                  <Text style={styles.roomListTime}>{room.time || ''}</Text>
+                  <Text style={styles.roomItemText}>{room.time || ''}</Text>
                 </View>
                 <View style={styles.roomListColumn}>
-                  <View style={styles.roomListMemberCounter}>
+                  <View style={styles.memberCounterWrapper}>
                     <MemberCounter currentCount={currentCount} maxMembers={maxMembers} size={14} />
                   </View>
                 </View>
@@ -1059,24 +1042,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     textAlign: 'center',
+    width: '100%',
   },
   roomItemText: {
     fontSize: 12,
     color: '#333',
     textAlign: 'center',
+    width: '100%',
   },
   destinationContainer: {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    paddingHorizontal: 2,
   },
   destinationText: {
     fontSize: 10,
     color: '#333',
     textAlign: 'center',
     lineHeight: 14,
+    width: '100%',
   },
   destinationRow: {
     flexDirection: 'row',
@@ -1140,12 +1125,29 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
     fontWeight: '500',
+    width: '100%',
+  },
+  listHeaderTextRight: {
+    paddingLeft: 15,
+  },
+  listHeaderTextMoreRight: {
+    paddingLeft: 25,
+  },
+  listHeaderTextMostRight: {
+    paddingLeft: 30,
+  },
+  listHeaderTextSingleLine: {
+    fontSize: 14,
+    flexShrink: 0,
+    minWidth: 80,
+    marginTop: 12,
   },
   // 5개 컬럼 레이아웃을 위한 공통 스타일
   roomListColumn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 2,
   },
   roomListColumnRight: {
     alignItems: 'flex-end',
@@ -1179,13 +1181,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     textAlign: 'center',
+    width: '100%',
   },
   roomListDestination: {
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'column',
     width: '100%',
-    paddingHorizontal: 2,
   },
   roomListArrowText: {
     fontSize: 16,
@@ -1198,11 +1200,13 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
     lineHeight: 14,
+    width: '100%',
   },
   roomListTime: {
     fontSize: 12,
     color: '#333',
     textAlign: 'center',
+    width: '100%',
   },
   roomListMemberCounter: {
     flexDirection: 'row',

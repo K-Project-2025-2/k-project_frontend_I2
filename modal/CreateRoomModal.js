@@ -667,7 +667,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#4A90E2',
+    borderColor: '#E0E0E0',
     overflow: 'hidden',
   },
   modalHeader: {
@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#4A90E2',
+    borderColor: '#E0E0E0',
     overflow: 'hidden',
   },
   directInputModalBody: {

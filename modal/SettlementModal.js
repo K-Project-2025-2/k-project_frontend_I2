@@ -158,32 +158,53 @@ const SettlementModal = ({ visible, onClose, roomData, onSettlementSubmit, initi
           <ScrollView style={styles.modalBody}>
             {/* 비용 섹션 */}
             <View style={styles.section}>
-              <Text style={styles.label}>비용</Text>
-              <TextInput
-                style={styles.costInput}
-                value={totalCost}
-                onChangeText={setTotalCost}
-                keyboardType="numeric"
-                placeholder="(입력)"
-              />
-              <Text style={styles.unitText}>원</Text>
+              <View style={styles.rowContainer}>
+                <Text style={styles.label}>비용</Text>
+                <TextInput
+                  style={styles.costInput}
+                  value={totalCost}
+                  onChangeText={setTotalCost}
+                  keyboardType="numeric"
+                  placeholder="입력"
+                />
+                <Text style={styles.unitText}>원</Text>
+              </View>
             </View>
 
             {/* 인원 섹션 - 방 인원수로 고정 */}
             <View style={styles.section}>
-              <Text style={styles.label}>인원</Text>
-              <View style={styles.memberCountDisplay}>
-                <Text style={styles.memberCountText}>{selectedMemberCount}명</Text>
+              <View style={styles.rowContainer}>
+                <Text style={styles.label}>인원</Text>
+                <View style={styles.memberCountDisplay}>
+                  <Text style={styles.memberCountText}>{selectedMemberCount}</Text>
+                </View>
+                <Text style={styles.unitText}>명</Text>
               </View>
             </View>
 
+            {/* 1인당 금액 표시 */}
+            {totalCost && selectedMemberCount > 0 && (
+              <View style={styles.section}>
+                <View style={styles.rowContainer}>
+                  <Text style={styles.label}>1인당 금액</Text>
+                  <View style={styles.perPersonDisplay}>
+                    <Text style={styles.perPersonText}>
+                      {Math.floor(parseFloat(totalCost) / selectedMemberCount).toLocaleString()}
+                    </Text>
+                  </View>
+                  <Text style={styles.unitText}>원</Text>
+                </View>
+              </View>
+            )}
+
             {/* 개별 요금 섹션 */}
             <View style={styles.section}>
+              <Text style={styles.sectionTitle}>개별 요금</Text>
               {memberNames.map((memberName, index) => (
                 <View key={index} style={styles.individualCostRow}>
-                  <TouchableOpacity style={styles.memberNameButton}>
+                  <View style={styles.memberNameButton}>
                     <Text style={styles.memberNameText}>{memberName}</Text>
-                  </TouchableOpacity>
+                  </View>
                   <View style={styles.individualCostDisplay}>
                     <Text style={styles.individualCostText}>
                       {individualCosts[memberName] || '0'}
@@ -197,12 +218,6 @@ const SettlementModal = ({ visible, onClose, roomData, onSettlementSubmit, initi
 
           {/* 하단 버튼 */}
           <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={[styles.footerButton, styles.resetButton]}
-              onPress={handleReset}
-            >
-              <Text style={styles.footerButtonText}>초기화</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.footerButton, styles.submitButton]}
               onPress={handleSubmit}
@@ -269,70 +284,113 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  rowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
   },
   label: {
     fontSize: 16,
     color: '#333',
-    marginBottom: 10,
+    fontWeight: '600',
+    minWidth: 80,
   },
   costInput: {
+    width: 200,
     backgroundColor: 'white',
     paddingHorizontal: 15,
     paddingVertical: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     fontSize: 16,
     color: '#333',
-    marginBottom: 5,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginHorizontal: 10,
   },
   unitText: {
     fontSize: 16,
-    color: '#333',
-    marginTop: 5,
+    color: '#666',
+    fontWeight: '500',
+    minWidth: 25,
   },
   memberCountDisplay: {
+    width: 200,
     backgroundColor: 'white',
     paddingHorizontal: 15,
     paddingVertical: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#E0E0E0',
+    marginLeft: 10,
+    marginRight: 10,
+    justifyContent: 'center',
   },
   memberCountText: {
     fontSize: 16,
     color: '#333',
     fontWeight: '500',
   },
+  perPersonDisplay: {
+    width: 200,
+    backgroundColor: 'white',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginLeft: 10,
+    marginRight: 10,
+    justifyContent: 'center',
+  },
+  perPersonText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
   individualCostRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   memberNameButton: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#F5F5F5',
     paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 6,
+    paddingVertical: 12,
+    borderRadius: 8,
     marginRight: 10,
-    minWidth: 80,
+    width: 80,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   memberNameText: {
     fontSize: 14,
     color: '#333',
+    fontWeight: '500',
   },
   individualCostDisplay: {
-    flex: 1,
+    width: 200,
     backgroundColor: 'white',
     paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 6,
-    marginRight: 5,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginRight: 10,
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   individualCostText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
+    fontWeight: '500',
   },
   modalFooter: {
     flexDirection: 'row',
@@ -343,9 +401,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 15,
     alignItems: 'center',
-  },
-  resetButton: {
-    backgroundColor: '#E0E0E0',
   },
   submitButton: {
     backgroundColor: '#4A90E2',
