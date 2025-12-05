@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MemberCounter from '../components/MemberCounter';
 import SettlementModal from '../modal/SettlementModal';
-import { sendMessage, getMessages, startOperation, acceptOperation, getOperationStatus, endOperation, leaveRoom, createSplit, getSplit, confirmPayment } from '../services/taxiApi';
+import { sendMessage, getMessages, startOperation, endOperation, leaveRoom, createSplit, getSplit, confirmPayment } from '../services/taxiApi';
 import { getDepositStatus } from '../services/depositApi';
 import { getUsername, getUserId, saveUserId, getAccountInfo } from '../services/apiConfig';
 import { getMyProfile } from '../services/myPageApi';
@@ -53,12 +53,8 @@ const ChatScreen = ({ navigation, route }) => {
   const savedKeyboardHeight = useRef(300); // 기본값 300
   // 정산 모달 표시 여부
   const [settlementModalVisible, setSettlementModalVisible] = useState(false);
-  // 운행 시작 요청 여부 (방장이 운행시작 버튼을 눌렀는지 여부)
-  const [isOperationRequested, setIsOperationRequested] = useState(false);
-  // 운행 시작 여부 (모든 사용자가 동의한 후 실제 운행이 시작된 여부)
+  // 운행 시작 여부
   const [isOperationStarted, setIsOperationStarted] = useState(false);
-  // 운행 수락한 사용자 목록 (모든 사용자 포함)
-  const [acceptedUsers, setAcceptedUsers] = useState([]);
   // 출발 메시지 표시 여부
   const [isDeparted, setIsDeparted] = useState(false);
   // 송금 완료한 사용자 목록 (사용자 ID 기반)
@@ -161,21 +157,14 @@ const ChatScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (messages.length === 0) return;
     
-    const hasOperationStartRequest = messages.some(msg => msg.type === 'operation_start');
     const hasOperationStarted = messages.some(msg => msg.type === 'operation_started');
-    
-    // 운행 시작 요청이 있으면 상태 복원 (아직 요청하지 않았을 때만)
-    if (hasOperationStartRequest && !isOperationRequested) {
-      console.log('메시지에서 운행 시작 요청 상태 복원 (모든 사용자)');
-      setIsOperationRequested(true);
-    }
     
     // 운행이 시작되었으면 상태 복원 (아직 시작하지 않았을 때만)
     if (hasOperationStarted && !isOperationStarted) {
       console.log('메시지에서 운행 시작 상태 복원 (모든 사용자)');
       setIsOperationStarted(true);
     }
-  }, [messages, isOperationRequested, isOperationStarted]);
+  }, [messages, isOperationStarted]);
 
   useEffect(() => {
     if (!roomData?.room_id) return;
@@ -362,13 +351,7 @@ const ChatScreen = ({ navigation, route }) => {
               return allMessages;
             } else {
               // 새 메시지는 없지만, 기존 메시지에서 운행 시작 상태 확인 (메시지가 업데이트되었을 수 있음)
-              const hasOperationStart = formattedMessages.some(msg => msg.type === 'operation_start');
               const hasOperationStarted = formattedMessages.some(msg => msg.type === 'operation_started');
-              
-              if (hasOperationStart && !isOperationRequested) {
-                console.log('Polling: 기존 메시지에서 운행 시작 요청 발견, 상태 업데이트');
-                setIsOperationRequested(true);
-              }
               
               if (hasOperationStarted && !isOperationStarted) {
                 console.log('Polling: 기존 메시지에서 운행 시작 발견, 상태 업데이트');
@@ -608,110 +591,8 @@ const ChatScreen = ({ navigation, route }) => {
   }, []);
   
   // 방별 수락 상태 저장 키 (useCallback으로 메모이제이션)
-  const getAcceptedKey = useCallback((roomId) => {
-    if (!roomId) return null;
-    return `accepted_${roomId}`;
-  }, []);
   
-  // 방 입장 시 이전 수락 상태 복원 (운행 시작 요청된 상태에서만)
-  useEffect(() => {
-    if (!roomData?.room_id || !myUserId || !isOperationRequested) return;
-    
-    const restoreAcceptedState = async () => {
-      try {
-        const acceptedKey = getAcceptedKey(roomData.room_id);
-        if (!acceptedKey) return;
-        
-        const acceptedUserIds = await AsyncStorage.getItem(acceptedKey);
-        if (acceptedUserIds) {
-          const parsed = JSON.parse(acceptedUserIds);
-          // 현재 사용자가 수락한 경우 acceptedUsers에 추가
-          if (Array.isArray(parsed) && parsed.includes(myUserId)) {
-            setAcceptedUsers(prev => {
-              if (!prev.includes(myUserId)) {
-                return [...prev, myUserId];
-              }
-              return prev;
-            });
-          }
-        }
-      } catch (error) {
-        console.log('수락 상태 복원 실패:', error);
-      }
-    };
-    
-    restoreAcceptedState();
-  }, [roomData?.room_id, myUserId, isOperationRequested, getAcceptedKey]);
 
-  // 참여자 수 변경 시 수락 상태 동기화
-  // current_count가 변경되면 (사용자가 나갔을 때) 수락 상태도 업데이트
-  useEffect(() => {
-    if (!isOperationRequested || !roomData?.room_id) return;
-    
-    const totalMembers = roomData?.max_members || roomData?.current_count || 1;
-    const currentAcceptedCount = acceptedUsers.length; // 모든 사용자 포함
-    
-    // 현재 참여자 수보다 수락한 인원이 많으면 조정
-    // (사용자가 나갔을 때 해당 사용자의 수락 상태 제거)
-    if (currentAcceptedCount > totalMembers) {
-      // 참여자 수에 맞게 수락 상태 조정
-      // TODO: 백엔드 API 연동 시 서버에서 받은 수락 상태 사용
-      // 임시: 참여자 수에 맞게 조정
-      const adjustedAcceptedUsers = acceptedUsers.slice(0, Math.max(0, totalMembers));
-      setAcceptedUsers(adjustedAcceptedUsers);
-    }
-  }, [roomData?.current_count, roomData?.max_members, isOperationRequested, roomData?.room_id, acceptedUsers.length]);
-
-  // 현재 사용자가 수락했는지 확인
-  const hasCurrentUserAccepted = myUserId ? acceptedUsers.includes(myUserId) : false;
-  
-  // 모든 인원이 수락했는지 확인
-  const totalMembers = roomData?.max_members || roomData?.current_count || 1;
-  const acceptedCount = acceptedUsers.length; // 모든 사용자 포함 (방장도 acceptedUsers에 포함)
-  const isAllAccepted = isOperationRequested && acceptedCount >= totalMembers && totalMembers > 0;
-  
-  // 모든 사용자가 동의하면 실제 운행 시작
-  useEffect(() => {
-    if (isAllAccepted && isOperationRequested && !isOperationStarted) {
-      const startActualOperation = async () => {
-        try {
-          const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
-          await startOperation(roomCode);
-          
-          setIsOperationStarted(true);
-          
-          const startMessage = {
-            message_id: Date.now(),
-            room_id: roomData?.room_id,
-            sender_id: null,
-            sender_name: '시스템',
-            message: '운행이 시작되었습니다.',
-            created_at: new Date().toISOString(),
-            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-            type: 'operation_started',
-          };
-          setMessages(prev => {
-            const updated = [...prev, startMessage];
-            // 시간순으로 정렬
-            return updated.sort((a, b) => {
-              const timeA = new Date(a.created_at).getTime();
-              const timeB = new Date(b.created_at).getTime();
-              return timeA - timeB;
-            });
-          });
-          
-          // 운행 시작 시 참여중인 채팅방 목록에 추가 (방장이 생성한 방이 아닌 경우만)
-          if (onAddToParticipatingRooms && !isFromCreate) {
-            onAddToParticipatingRooms(roomData);
-          }
-        } catch (error) {
-          Alert.alert('오류', error.message || '운행 시작에 실패했습니다.');
-        }
-      };
-      
-      startActualOperation();
-    }
-  }, [isAllAccepted, isOperationRequested, isOperationStarted, roomData, onAddToParticipatingRooms, isFromCreate]);
 
   // 메시지 전송 (API 명세서에 맞춘 구조)
   const handleSend = async () => {
@@ -827,8 +708,8 @@ const ChatScreen = ({ navigation, route }) => {
     const maxMembers = roomData?.max_members || 4;
     const isTestMode = currentCount === 1 && maxMembers > 1; // 테스트 모드: 인원이 1명이고 최대 인원이 1명보다 많을 때
     
-    // 출발 버튼인 경우 (모든 수락 완료 후)
-    if (isOperationStarted && (isAllAccepted || isTestMode) && !isDeparted) {
+    // 출발 버튼인 경우 (운행 시작 후)
+    if (isOperationStarted && !isDeparted) {
       // 출발 확정
       try {
         const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
@@ -859,145 +740,37 @@ const ChatScreen = ({ navigation, route }) => {
       return;
     }
     
-    // 운행 시작 요청 (모든 사용자의 동의를 기다림)
-    setIsOperationRequested(true);
-    // 수락 상태 초기화 (방장은 자동으로 수락 목록에 추가)
-    if (myUserId) {
-      setAcceptedUsers([myUserId]);
-    } else {
-      setAcceptedUsers([]);
-    }
-    setIsDeparted(false);
-    
-    // AsyncStorage에서 수락 상태 초기화
+    // 운행 시작 (동의 없이 바로 시작)
     try {
-      const acceptedKey = getAcceptedKey(roomData?.room_id);
-      if (acceptedKey) {
-        await AsyncStorage.removeItem(acceptedKey);
-      }
-    } catch (error) {
-      console.log('수락 상태 초기화 실패:', error);
-    }
-    
-    const requestMessage = {
-      message_id: Date.now(),
-      room_id: roomData?.room_id,
-      sender_id: null,
-      sender_name: '시스템',
-      message: '운행 시작을 요청했습니다. 모든 참여자의 동의가 필요합니다.',
-      created_at: new Date().toISOString(),
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-      type: 'operation_start', // 운행 시작 메시지 타입
-    };
-    setMessages(prev => {
-      const updated = [...prev, requestMessage];
-      // 시간순으로 정렬
-      return updated.sort((a, b) => {
-        const timeA = new Date(a.created_at).getTime();
-        const timeB = new Date(b.created_at).getTime();
-        return timeA - timeB;
+      const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
+      await startOperation(roomCode);
+      setIsOperationStarted(true);
+      
+      const startMessage = {
+        message_id: Date.now(),
+        room_id: roomData?.room_id,
+        sender_id: null,
+        sender_name: '시스템',
+        message: '운행이 시작되었습니다.',
+        created_at: new Date().toISOString(),
+        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        type: 'operation_started',
+      };
+      setMessages(prev => {
+        const updated = [...prev, startMessage];
+        // 시간순으로 정렬
+        return updated.sort((a, b) => {
+          const timeA = new Date(a.created_at).getTime();
+          const timeB = new Date(b.created_at).getTime();
+          return timeA - timeB;
+        });
       });
-    });
-  };
-
-  // 운행 시작 동의 핸들러 (모든 사용자)
-  const handleAcceptOperation = async () => {
-    if (!myUserId) {
-      return;
-    }
-    
-    // 이미 수락한 사용자인지 확인
-    if (hasCurrentUserAccepted) {
-      return;
-    }
-    
-    // 운행 시작 요청이 없으면 동의 불가
-    if (!isOperationRequested) {
-      return;
-    }
-    
-    try {
-      // 방장이 아닌 경우에만 API 호출
-      if (!isHost) {
-        const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
-        await acceptOperation(roomCode);
-      }
-      
-      // 모든 사용자(방장 포함)를 수락 목록에 추가
-      const newAcceptedUsers = [...acceptedUsers, myUserId];
-      setAcceptedUsers(newAcceptedUsers);
-      
-      // AsyncStorage에 수락 상태 저장
-      try {
-        const acceptedKey = getAcceptedKey(roomData?.room_id);
-        if (acceptedKey) {
-          await AsyncStorage.setItem(acceptedKey, JSON.stringify(newAcceptedUsers));
-        }
-      } catch (error) {
-        console.log('수락 상태 저장 실패:', error);
-      }
     } catch (error) {
-      Alert.alert('오류', error.message || '운행 동의에 실패했습니다.');
+      Alert.alert('오류', error.message || '운행 시작에 실패했습니다.');
     }
   };
 
-  // 운행 상태 Polling (운행 시작 요청 후 3초마다, 실제 운행 시작 전까지)
-  useEffect(() => {
-    if (!isOperationRequested || isOperationStarted || isDeparted || !roomData?.room_id) return;
-    
-    const operationStatusPolling = setInterval(async () => {
-      try {
-        const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
-        const status = await getOperationStatus(roomCode);
-        
-        // 서버에서 받은 수락 상태로 업데이트
-        if (status.acceptedMembers && Array.isArray(status.acceptedMembers)) {
-          const serverAcceptedUserIds = status.acceptedMembers.map(member => 
-            member.userId || member.user_id
-          ).filter(Boolean);
-          
-          // 서버에서 받은 수락한 사용자 목록 (모든 사용자 포함)
-          const serverAcceptedUserIdsString = serverAcceptedUserIds.map(id => String(id));
-          setAcceptedUsers(serverAcceptedUserIdsString);
-        }
-        
-        // 모든 인원이 수락했는지 확인
-        if (status.isAllAccepted && !isDeparted) {
-          // 모든 인원 수락 완료 시 "운행이 시작되었습니다." 메시지 표시
-          setMessages(prev => {
-            const hasStartMessage = prev.some(msg => 
-              msg.type === 'operation_started' || 
-              (msg.type === 'operation_start' && msg.message === '운행이 시작되었습니다.')
-            );
-            if (!hasStartMessage) {
-              return [...prev, {
-                message_id: Date.now(),
-                room_id: roomData?.room_id,
-                sender_id: null,
-                sender_name: '시스템',
-                message: '운행이 시작되었습니다.',
-                created_at: new Date().toISOString(),
-                time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-                type: 'operation_started',
-              }];
-            }
-            return prev;
-          });
-        }
-        
-        // 운행 상태가 DEPARTED로 변경되었는지 확인
-        if (status.operationStatus === 'DEPARTED' && !isDeparted) {
-          setIsDeparted(true);
-        }
-      } catch (error) {
-        console.log('운행 상태 Polling 실패:', error.message);
-      }
-    }, 3000);
-    
-    return () => {
-      clearInterval(operationStatusPolling);
-    };
-  }, [isOperationRequested, isOperationStarted, isDeparted, roomData?.room_id, roomData?.roomCode, myUserId]);
+
 
   // 정산 전송 핸들러 (모든 사용자 가능)
   const handleSettlementSubmit = async (settlementData) => {
@@ -1174,10 +947,8 @@ const ChatScreen = ({ navigation, route }) => {
     // 운행 수락 후 정산 완료 후 송금 완료 전까지 나가기 불가
     // (운행 수락한 이용자만 제한, 방장은 제한 없음)
     
-    // 현재 사용자가 운행 수락했는지 확인
-    const hasUserAccepted = hasCurrentUserAccepted || isHost; // 방장은 자동 수락
-    
-    if (hasUserAccepted) {
+    // 운행 시작 후 정산 가능
+    if (isOperationStarted) {
       // 정산 메시지 확인
       const settlementMessage = messages.find(msg => msg.type === 'settlement');
       
@@ -1264,8 +1035,8 @@ const ChatScreen = ({ navigation, route }) => {
           </View>
         </View>
         
-        {/* 운행 시작 버튼 (방장에게만 표시, 요청 전에만) */}
-        {isHost && !isOperationRequested && !isOperationStarted && (
+        {/* 운행 시작 버튼 (방장에게만 표시, 운행 시작 전에만) */}
+        {isHost && !isOperationStarted && (
           <View style={styles.operationStartHeader}>
             <TouchableOpacity 
               style={styles.operationStartButton}
@@ -1314,57 +1085,6 @@ const ChatScreen = ({ navigation, route }) => {
               );
             }
             
-            // 운행 시작 메시지인 경우
-            if (msg.type === 'operation_start') {
-              // 모든 사용자(방장 포함)에게 동의 버튼 표시
-              const shouldShowButton = !hasCurrentUserAccepted && isOperationRequested && !isOperationStarted;
-              
-              // 게이지 계산: 수락한 인원 수 / 전체 인원 수
-              // 현재 참여자 수(current_count)를 기준으로 계산
-              // 사용자가 나가면 current_count가 감소하고, 게이지도 자동으로 반영됨
-              const totalMembers = roomData?.current_count || roomData?.max_members || 1;
-              // acceptedUsers에는 모든 수락한 사용자(방장 포함)가 포함됨
-              const acceptedCount = acceptedUsers.length;
-              const progress = Math.min(acceptedCount / totalMembers, 1); // 0 ~ 1 (최대 1로 제한)
-              const isAllAccepted = acceptedCount >= totalMembers;
-              
-              return (
-                <View key={msg.message_id} style={styles.operationStartMessageBubble}>
-                  <Text style={styles.operationStartMessageText}>{msg.message}</Text>
-                  
-                  {/* 게이지 바 */}
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressBarBackground}>
-                      <View 
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${progress * 100}%` },
-                          isAllAccepted && styles.progressBarFillComplete
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.progressText}>
-                      {isAllAccepted ? '수락 완료' : `${acceptedCount}/${totalMembers}`}
-                    </Text>
-                  </View>
-                  
-                  {shouldShowButton && (
-                    <TouchableOpacity
-                      style={styles.acceptButton}
-                      onPress={handleAcceptOperation}
-                    >
-                      <Text style={styles.acceptButtonText}>운행 시작 동의</Text>
-                    </TouchableOpacity>
-                  )}
-                  {hasCurrentUserAccepted && (
-                    <View style={styles.acceptedIndicator}>
-                      <Text style={styles.acceptedText}>✓ 동의 완료</Text>
-                    </View>
-                  )}
-                  <Text style={styles.messageTime}>{msg.time}</Text>
-                </View>
-              );
-            }
             
             // 정산 메시지인 경우
             if (msg.type === 'settlement') {
@@ -1613,16 +1333,27 @@ const ChatScreen = ({ navigation, route }) => {
                       return;
                     }
                     
-                    // 계좌 정보 전송 메시지
+                    // 계좌 정보를 일반 채팅 메시지로 전송
+                    const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
+                    const accountMessage = `계좌 정보: ${bank} ${accountNumber}`;
+                    
+                    // API를 통해 메시지 전송
+                    const response = await sendMessage(roomCode, accountMessage);
+                    
+                    // 현재 사용자 정보 가져오기
+                    const currentUserId = await getUserId();
+                    const currentUserIdStr = currentUserId ? String(currentUserId) : null;
+                    const userName = await getUsername() || myProfileName || '나';
+                    
+                    // 전송된 메시지를 메시지 목록에 추가
                     const accountSendMessage = {
-                      message_id: Date.now(),
-                      room_id: roomData?.room_id,
-                      sender_id: null,
-                      sender_name: '시스템',
-                      message: `계좌 정보: ${bank} ${accountNumber}`,
-                      created_at: new Date().toISOString(),
-                      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-                      type: 'account_sent',
+                      message_id: response.id || response.messageId || response.message_id || Date.now(),
+                      room_id: response.roomCode || response.roomId || response.room_id || roomData?.room_id,
+                      sender_id: currentUserIdStr,
+                      sender_name: userName,
+                      message: response.content || response.message || accountMessage,
+                      created_at: response.createdAt || response.created_at || new Date().toISOString(),
+                      time: new Date(response.createdAt || response.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
                     };
                     setMessages(prev => {
                       const updated = [...prev, accountSendMessage];

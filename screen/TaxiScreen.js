@@ -130,14 +130,12 @@ const TaxiScreen = ({ navigation }) => {
               isPublic: isPublicValue,
             };
           });
-          // 참여중인 방은 제외하고, 공개 방만 표시
+          // 참여중인 방은 제외 (나머지는 모두 표시)
           // 참고: participatingRooms는 비동기로 로드되므로, 여기서는 formattedRooms만 필터링
+          // isPublic 필터링 제거 - 모든 방을 표시 (비공개 방은 초대코드로만 입장 가능)
           const filteredRooms = formattedRooms.filter(room => {
-            // 공개 방만 표시 (isPublic이 명시적으로 false가 아닌 방)
-            // null, undefined, true 모두 공개 방으로 간주
-            const isPublic = room.isPublic !== false;
-            console.log(`방 ${room.room_id} 필터링 결과:`, isPublic, 'isPublic 값:', room.isPublic);
-            return isPublic;
+            // 참여중인 방만 제외, 나머지는 모두 표시
+            return true; // 모든 방 표시
           });
           console.log('필터링된 참여 가능한 방 목록:', filteredRooms);
           console.log('필터링 전 방 개수:', formattedRooms.length, '필터링 후 방 개수:', filteredRooms.length);
@@ -345,15 +343,15 @@ const TaxiScreen = ({ navigation }) => {
             isPublic: room.isPublic !== undefined ? room.isPublic : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
           };
         });
-        // 참여중인 방은 제외하고, 공개 방만 표시
+        // 참여중인 방만 제외 (나머지는 모두 표시)
         const participatingRoomIds = participatingRooms.map(r => r.room_id);
         const filteredRooms = formattedRooms.filter(room => {
           // 참여중인 방은 제외
           if (participatingRoomIds.includes(room.room_id)) {
             return false;
           }
-          // 공개 방만 표시 (isPublic이 false가 아닌 방)
-          return room.isPublic !== false;
+          // 나머지는 모두 표시 (isPublic 필터링 제거)
+          return true;
         });
         console.log('새로고침 - 필터링된 참여 가능한 방 목록:', filteredRooms);
         setAvailableRooms(filteredRooms);
@@ -633,9 +631,7 @@ const TaxiScreen = ({ navigation }) => {
                       <View style={styles.roomNumberWithLock}>
                         <Text style={styles.roomNumberText}>{room.room_id}</Text>
                         {(room.isPublic === false || room.invite_code_enabled) && (
-                          <View style={{ marginLeft: 4 }}>
-                            <LockIcon size={10} />
-                          </View>
+                          <LockIcon size={10} />
                         )}
                       </View>
                     </View>
@@ -747,9 +743,7 @@ const TaxiScreen = ({ navigation }) => {
                   <View style={styles.roomNumberWithLock}>
                     <Text style={styles.roomNumberText}>{room.room_id}</Text>
                     {(room.isPublic === false || room.invite_code_enabled) && (
-                      <View style={{ marginLeft: 4 }}>
-                        <LockIcon size={10} />
-                      </View>
+                      <LockIcon size={10} />
                     )}
                   </View>
                 </View>
@@ -1085,6 +1079,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 0,
   },
   roomNumberText: {
     fontSize: 14,
