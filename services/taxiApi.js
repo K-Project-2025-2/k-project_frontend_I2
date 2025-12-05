@@ -75,20 +75,28 @@ export const getMyRooms = async () => {
 export const getRooms = async () => {
   try {
     const headers = await getAuthHeaders();
+    console.log('getRooms API 호출:', `${API_BASE_URL}/api/taxi/rooms`);
     const response = await fetch(`${API_BASE_URL}/api/taxi/rooms`, {
       method: 'GET',
       headers,
     });
 
+    console.log('getRooms 응답 상태:', response.status);
     if (response.status === 200) {
       const data = await response.json();
-      return Array.isArray(data) ? data : (data.rooms || data.data || []);
+      console.log('getRooms 응답 데이터:', JSON.stringify(data, null, 2));
+      const rooms = Array.isArray(data) ? data : (data.rooms || data.data || []);
+      console.log('getRooms 반환할 방 개수:', rooms.length);
+      return rooms;
     } else {
       // API가 없으면 빈 배열 반환
+      const errorText = await response.text();
+      console.log('getRooms 응답 에러:', response.status, errorText);
       return [];
     }
   } catch (error) {
-    console.log('전체 방 목록 조회 실패 (API 없음):', error.message);
+    console.error('전체 방 목록 조회 실패:', error);
+    console.error('에러 상세:', error.message, error.stack);
     // API가 없어도 에러를 던지지 않고 빈 배열 반환
     return [];
   }

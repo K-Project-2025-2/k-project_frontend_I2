@@ -101,12 +101,17 @@ const TaxiScreen = ({ navigation }) => {
       // 전체 방 목록 가져오기 (공개 방 목록)
       try {
         const allRooms = await getRooms();
-        console.log('전체 방 목록 API 응답:', allRooms);
+        console.log('전체 방 목록 API 응답:', JSON.stringify(allRooms, null, 2));
         if (allRooms && allRooms.length > 0) {
           // API 응답을 UI 형식에 맞게 변환
           const formattedRooms = allRooms.map(room => {
+            console.log('방 데이터 변환:', room);
             // 기존 availableRooms에서 같은 방을 찾아서 invite_code_enabled 값 유지
             const existingRoom = availableRooms.find(r => r.room_id === room.id);
+            const isPublicValue = room.isPublic !== undefined 
+              ? room.isPublic 
+              : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true); // 백엔드 응답 또는 기존 값, 없으면 기본값 true
+            console.log(`방 ${room.id}의 isPublic 값:`, isPublicValue, '원본:', room.isPublic);
             return {
               room_id: room.id,
               roomCode: room.roomCode,
@@ -122,24 +127,29 @@ const TaxiScreen = ({ navigation }) => {
                 : (existingRoom?.invite_code_enabled !== undefined ? existingRoom.invite_code_enabled : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
               meetingTime: room.meetingTime,
               time: new Date(room.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-              isPublic: room.isPublic !== undefined ? room.isPublic : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true), // 백엔드 응답 또는 기존 값, 없으면 기본값 true
+              isPublic: isPublicValue,
             };
           });
           // 참여중인 방은 제외하고, 공개 방만 표시
           // 참고: participatingRooms는 비동기로 로드되므로, 여기서는 formattedRooms만 필터링
           const filteredRooms = formattedRooms.filter(room => {
-            // 공개 방만 표시 (isPublic이 false가 아닌 방)
-            return room.isPublic !== false;
+            // 공개 방만 표시 (isPublic이 명시적으로 false가 아닌 방)
+            // null, undefined, true 모두 공개 방으로 간주
+            const isPublic = room.isPublic !== false;
+            console.log(`방 ${room.room_id} 필터링 결과:`, isPublic, 'isPublic 값:', room.isPublic);
+            return isPublic;
           });
           console.log('필터링된 참여 가능한 방 목록:', filteredRooms);
+          console.log('필터링 전 방 개수:', formattedRooms.length, '필터링 후 방 개수:', filteredRooms.length);
           setAvailableRooms(filteredRooms);
         } else {
           // API가 없거나 빈 배열이면 빈 배열로 설정
-          console.log('전체 방 목록이 비어있음');
+          console.log('전체 방 목록이 비어있음 또는 null/undefined');
           setAvailableRooms([]);
         }
       } catch (error) {
         console.error('전체 방 목록 조회 실패:', error);
+        console.error('에러 상세:', error.message, error.stack);
         // 에러 발생 시 빈 배열로 설정
         setAvailableRooms([]);
       }
@@ -698,36 +708,37 @@ const TaxiScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* 방 목록 섹션 */}
-        {availableRooms.filter(room => room.isPublic !== false).length > 0 && (
-          <View style={styles.availableRoomsContainer}>
-            <View style={styles.availableRoomsHeader}>
-              <Text style={styles.availableRoomsTitle}>참여 가능한 채팅방</Text>
-              <TouchableOpacity 
-                style={styles.smallRefreshButton}
-                onPress={handleRefreshRooms}
-              >
-                <MaterialIcons name="refresh" size={16} color="#999" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.listHeader}>
-              <View style={styles.roomListColumn}>
-                <Text style={styles.listHeaderText}>방 번호</Text>
+        {/* 방 목록 섹션 - 항상 표시 */}
+        <View style={styles.availableRoomsContainer}>
+          <View style={styles.availableRoomsHeader}>
+            <Text style={styles.availableRoomsTitle}>참여 가능한 채팅방</Text>
+            <TouchableOpacity 
+              style={styles.smallRefreshButton}
+              onPress={handleRefreshRooms}
+            >
+              <MaterialIcons name="refresh" size={16} color="#999" />
+            </TouchableOpacity>
+          </View>
+          {availableRooms.length > 0 ? (
+            <>
+              <View style={styles.listHeader}>
+                <View style={styles.roomListColumn}>
+                  <Text style={styles.listHeaderText}>방 번호</Text>
+                </View>
+                <View style={styles.roomListColumn}>
+                  <Text style={[styles.listHeaderText, styles.listHeaderTextRight]}>목적지</Text>
+                </View>
+                <View style={styles.roomListColumn}>
+                  <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine]}>출발시간</Text>
+                </View>
+                <View style={styles.roomListColumn}>
+                  <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine, styles.listHeaderTextMostRight]}>인원현황</Text>
+                </View>
+                <View style={styles.roomListColumn}>
+                </View>
               </View>
-              <View style={styles.roomListColumn}>
-                <Text style={[styles.listHeaderText, styles.listHeaderTextRight]}>목적지</Text>
-              </View>
-              <View style={styles.roomListColumn}>
-                <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine]}>출발시간</Text>
-              </View>
-              <View style={styles.roomListColumn}>
-                <Text style={[styles.listHeaderText, styles.listHeaderTextRight, styles.listHeaderTextMoreRight, styles.listHeaderTextSingleLine, styles.listHeaderTextMostRight]}>인원현황</Text>
-              </View>
-              <View style={styles.roomListColumn}>
-              </View>
-            </View>
-            {/* 다른 사람들이 생성한 방 목록 (공개 방만 표시) */}
-            {availableRooms.filter(room => room.isPublic !== false).map((room) => {
+              {/* 다른 사람들이 생성한 방 목록 (공개 방만 표시) */}
+              {availableRooms.map((room) => {
             const currentCount = room.current_count || 0;
             const maxMembers = room.max_members || 4; // 방 생성 시 설정한 인원 수
             return (
@@ -881,8 +892,13 @@ const TaxiScreen = ({ navigation }) => {
               </View>
             );
           })}
-          </View>
-        )}
+            </>
+          ) : (
+            <View style={styles.emptyRoomsContainer}>
+              <Text style={styles.emptyRoomsText}>참여 가능한 채팅방이 없습니다.</Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       {/* 방 생성 모달 */}
@@ -1265,6 +1281,17 @@ const styles = StyleSheet.create({
   },
   roomListEnterButtonTextDisabled: {
     color: '#666',
+  },
+  emptyRoomsContainer: {
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyRoomsText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
   },
 });
 

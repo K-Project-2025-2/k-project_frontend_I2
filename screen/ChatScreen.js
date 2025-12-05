@@ -339,6 +339,20 @@ const ChatScreen = ({ navigation, route }) => {
             const existingIds = new Set(prev.map(m => m.message_id));
             const uniqueNewMessages = formattedMessages.filter(m => !existingIds.has(m.message_id));
             if (uniqueNewMessages.length > 0) {
+              // 운행 시작 요청 메시지가 새로 추가되었는지 확인
+              const hasNewOperationStart = uniqueNewMessages.some(msg => msg.type === 'operation_start');
+              if (hasNewOperationStart) {
+                console.log('Polling: 새로운 운행 시작 요청 메시지 감지, 상태 업데이트');
+                setIsOperationRequested(true);
+              }
+              
+              // 운행 시작 메시지가 새로 추가되었는지 확인
+              const hasNewOperationStarted = uniqueNewMessages.some(msg => msg.type === 'operation_started');
+              if (hasNewOperationStarted) {
+                console.log('Polling: 새로운 운행 시작 메시지 감지, 상태 업데이트');
+                setIsOperationStarted(true);
+              }
+              
               // 시간순으로 정렬
               const allMessages = [...prev, ...uniqueNewMessages].sort((a, b) => {
                 const timeA = new Date(a.created_at).getTime();
@@ -346,6 +360,20 @@ const ChatScreen = ({ navigation, route }) => {
                 return timeA - timeB;
               });
               return allMessages;
+            } else {
+              // 새 메시지는 없지만, 기존 메시지에서 운행 시작 상태 확인 (메시지가 업데이트되었을 수 있음)
+              const hasOperationStart = formattedMessages.some(msg => msg.type === 'operation_start');
+              const hasOperationStarted = formattedMessages.some(msg => msg.type === 'operation_started');
+              
+              if (hasOperationStart && !isOperationRequested) {
+                console.log('Polling: 기존 메시지에서 운행 시작 요청 발견, 상태 업데이트');
+                setIsOperationRequested(true);
+              }
+              
+              if (hasOperationStarted && !isOperationStarted) {
+                console.log('Polling: 기존 메시지에서 운행 시작 발견, 상태 업데이트');
+                setIsOperationStarted(true);
+              }
             }
             return prev;
           });
