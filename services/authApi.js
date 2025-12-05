@@ -303,7 +303,7 @@ export const resetPassword = async (email, code, newPassword) => {
   } catch (error) {
     console.error('비밀번호 재설정 에러:', error);
     throw error;
-  }
+  }ㄱㄱ
 };
 
 

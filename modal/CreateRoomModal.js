@@ -235,6 +235,10 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
                   <Text style={styles.roomInfoValue}>{createdRoomData.destination}</Text>
                 </View>
                 <View style={styles.roomInfoRow}>
+                  <Text style={styles.roomInfoLabel}>출발시간</Text>
+                  <Text style={styles.roomInfoValue}>{createdRoomData.time}</Text>
+                </View>
+                <View style={styles.roomInfoRow}>
                   <Text style={styles.roomInfoLabel}>인원</Text>
                   <Text style={styles.roomInfoValue}>{createdRoomData.members}</Text>
                 </View>

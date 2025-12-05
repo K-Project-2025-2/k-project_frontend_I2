@@ -82,8 +82,15 @@ const InviteCodeModal = ({ visible, onClose, onEnter, onCodeFailed, targetRoom =
     );
 
     if (!foundRoom) {
-      console.log('방을 찾을 수 없음');
-      Alert.alert('알림', '존재하지 않는 방입니다');
+      // 로컬에서 방을 찾지 못했을 때도 백엔드 API를 통해 확인하도록 처리
+      // roomData가 null이면 handleInviteCodeEntered에서 백엔드 API를 호출하여 방을 찾도록 함
+      console.log('로컬에서 방을 찾을 수 없음, 백엔드 API로 확인 시도');
+      const roomData = {
+        roomCode: trimmedCode,
+        invite_code: trimmedCode,
+        invite_code_enabled: true,
+      };
+      onEnter(roomData, trimmedCode);
       setInviteCode('');
       return;
     }

@@ -1356,7 +1356,7 @@ const ChatScreen = ({ navigation, route }) => {
         {showActionButtons && (
             <ScrollView 
               style={[styles.actionButtonsGrid, { 
-                maxHeight: keyboardHeight > 0 ? keyboardHeight : (savedKeyboardHeight?.current || 300),
+                maxHeight: keyboardHeight > 0 ? keyboardHeight : (savedKeyboardHeight.current || 300),
               }]}
               contentContainerStyle={styles.actionButtonsContent}
               nestedScrollEnabled={true}
@@ -1375,6 +1375,7 @@ const ChatScreen = ({ navigation, route }) => {
                       Alert.alert('알림', '운행을 시작해야 작동됩니다.');
                       return;
                     }
+                    setShowActionButtons(false);
                     setSettlementModalVisible(true);
                   }}
                 >
@@ -1388,6 +1389,12 @@ const ChatScreen = ({ navigation, route }) => {
                   try {
                     // 내정보에서 등록한 계좌 정보 가져오기
                     const accountInfo = await getAccountInfo();
+                    
+                    if (!accountInfo) {
+                      Alert.alert('알림', '내정보에서 계좌 정보를 먼저 등록해주세요.');
+                      return;
+                    }
+                    
                     const bank = accountInfo.bank || '';
                     const accountNumber = accountInfo.accountNumber || '';
                     
@@ -1408,7 +1415,11 @@ const ChatScreen = ({ navigation, route }) => {
                       type: 'account_sent',
                     };
                     setMessages(prev => [...prev, accountSendMessage]);
+                    
+                    // 플러스 메뉴 닫기
+                    setShowActionButtons(false);
                   } catch (error) {
+                    console.error('계좌 정보 전송 에러:', error);
                     Alert.alert('오류', '계좌 정보 전송에 실패했습니다.');
                   }
                 }}
@@ -1417,7 +1428,10 @@ const ChatScreen = ({ navigation, route }) => {
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => navigation.navigate('Report', { roomData })}
+                onPress={() => {
+                  setShowActionButtons(false);
+                  navigation.navigate('Report', { roomData });
+                }}
               >
                 <Text style={styles.actionButtonText}>신고</Text>
               </TouchableOpacity>
@@ -1426,7 +1440,10 @@ const ChatScreen = ({ navigation, route }) => {
                   styles.actionButton,
                   isOperationStarted && !isHost ? styles.actionButtonDisabled : null
                 ]} 
-                onPress={handleLeaveRoom}
+                onPress={() => {
+                  setShowActionButtons(false);
+                  handleLeaveRoom();
+                }}
                 disabled={isOperationStarted && !isHost}
               >
                 <Text style={[
