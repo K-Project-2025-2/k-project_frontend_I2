@@ -493,59 +493,77 @@ export const confirmPayment = async (roomCode) => {
   }
 };
 
-// ==================== 신고 관련 API ====================
-
 // 분실물 신고 (Swagger 명세에 맞게 수정)
 // Swagger: POST /lost-and-found
 export const reportLostAndFound = async (reportData) => {
   try {
     const headers = await getAuthHeaders();
+    const requestBody = {
+      location: reportData.location,
+      description: reportData.description,
+    };
+    
+    console.log('분실물 신고 요청:', requestBody);
+    
     const response = await fetch(`${API_BASE_URL}/lost-and-found`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        location: reportData.location,
-        description: reportData.description,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
-    if (response.status === 200) {
-      const data = await response.json();
+    console.log('분실물 신고 응답 상태:', response.status, response.statusText);
+    console.log('분실물 신고 응답 OK:', response.ok);
+
+    // 200-299 범위의 상태 코드는 모두 성공으로 처리
+    if (response.ok) {
+      let data;
+      try {
+        const text = await response.text();
+        console.log('분실물 신고 응답 본문:', text);
+        
+        // 응답 본문이 비어있을 수 있음
+        if (text) {
+          data = JSON.parse(text);
+        } else {
+          data = { message: '분실물 신고가 완료되었습니다.' };
+        }
+      } catch (parseError) {
+        console.error('응답 파싱 에러:', parseError);
+        // JSON이 아닌 경우에도 성공으로 처리
+        data = { message: '분실물 신고가 완료되었습니다.' };
+      }
       return data;
     } else {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '분실물 신고 실패');
+      // 에러 응답 처리
+      let errorData = {};
+      try {
+        const text = await response.text();
+        console.log('분실물 신고 에러 응답:', text);
+        errorData = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error('에러 응답 파싱 실패:', parseError);
+      }
+      
+      const errorMessage = errorData.message || errorData.error || `분실물 신고 실패 (${response.status})`;
+      console.error('분실물 신고 에러:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData,
+      });
+      throw new Error(errorMessage);
     }
   } catch (error) {
-    console.error('분실물 신고 에러:', error);
-    throw error;
-  }
-};
-
-// 이용자 신고 (Swagger 명세에 맞게 수정)
-// Swagger: POST /me/report
-export const reportUser = async (reportData) => {
-  try {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/me/report`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        reported_user_id: reportData.reported_user_id,
-        reason: reportData.reason,
-        details: reportData.details || '',
-      }),
+    console.error('분실물 신고 에러 상세:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
     });
-
-    if (response.status === 200) {
-      const data = await response.json();
-      return data;
-    } else {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '이용자 신고 실패');
+    
+    // 네트워크 에러인 경우
+    if (error.message === 'Network request failed' || error.name === 'TypeError') {
+      throw new Error('네트워크 연결을 확인해주세요.');
     }
-  } catch (error) {
-    console.error('이용자 신고 에러:', error);
+    
     throw error;
   }
 };
