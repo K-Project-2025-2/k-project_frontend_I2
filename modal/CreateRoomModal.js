@@ -7,7 +7,10 @@ import {
   Modal,
   ScrollView,
   TextInput,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { createRoom } from '../services/taxiApi';
 
 // 위치 목록
 const LOCATIONS = [
@@ -39,6 +42,8 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
   const [showCompleteScreen, setShowCompleteScreen] = useState(false);
   // 생성된 방 데이터
   const [createdRoomData, setCreatedRoomData] = useState(null);
+  // 로딩 상태
+  const [loading, setLoading] = useState(false);
 
   // 위치 선택 핸들러
   const handleLocationSelect = (location) => {
@@ -90,41 +95,60 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
   };
 
   // 완료 핸들러 - 방 생성 완료 화면으로 전환
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (!departure || !destination) {
-      alert('출발지와 도착지를 모두 선택해주세요.');
+      Alert.alert('알림', '출발지와 도착지를 모두 선택해주세요.');
       return;
     }
 
-    // 초대코드 생성 (옵션)
-    const inviteCode = inviteCodeEnabled
-      ? Math.floor(100000 + Math.random() * 900000).toString()
-      : null;
+    setLoading(true);
+    try {
+      // 현재 시간을 ISO 8601 형식으로 변환
+      const meetingTime = new Date().toISOString();
+      
+      // API 호출 (Swagger 명세: meetingPoint, destination, meetingTime, capacity)
+      const response = await createRoom(
+        departure,      // meetingPoint
+        destination,    // destination
+        meetingTime,    // meetingTime (ISO 8601)
+        maxMembers      // capacity
+      );
 
-    // API 명세서에 맞춘 방 데이터 구조
-    // 실제로는 createRoom API를 호출해야 하지만, 지금은 임시 데이터 생성
-    const roomData = {
-      room_id: nextRoomId, // API: room_id (number) - 100부터 순차적으로 증가
-      departure, // API: departure
-      destination, // API: destination
-      max_members: maxMembers, // API: max_members
-      current_count: 1, // 생성자는 자동으로 포함
-      host_id: null, // API에서 받아올 값
-      status: 'OPEN', // API: OPEN, CLOSED
-      invite_code: inviteCode, // API: 초대코드 (옵션)
-      invite_code_enabled: inviteCodeEnabled,
-      // UI 표시용 추가 필드
-      members: `${maxMembers}명`,
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-    };
+      // API 응답 데이터를 UI 형식에 맞게 변환
+      const roomData = {
+        room_id: response.id || response.roomCode || nextRoomId,
+        roomCode: response.roomCode,
+        departure: response.meetingPoint || departure,
+        destination: response.destination || destination,
+        max_members: response.capacity || maxMembers,
+        current_count: response.memberCount || 1,
+        host_id: response.leaderId,
+        status: response.status || 'ACTIVE',
+        invite_code: response.roomCode,
+        invite_code_enabled: inviteCodeEnabled,
+        meetingTime: response.meetingTime || meetingTime,
+        // UI 표시용 추가 필드
+        members: `${response.capacity || maxMembers}명`,
+        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      };
 
-    // 방 생성 완료 화면 표시
-    setCreatedRoomData(roomData);
-    setShowCompleteScreen(true);
-    
-    // 다음 방번호 업데이트
-    if (onRoomCreated) {
-      onRoomCreated(nextRoomId);
+      // 방 생성 완료 화면 표시
+      setCreatedRoomData(roomData);
+      setShowCompleteScreen(true);
+      
+      // 다음 방번호 업데이트
+      if (onRoomCreated && response.id) {
+        onRoomCreated(response.id);
+      }
+    } catch (error) {
+      // 백엔드에서 이미 방이 있다는 에러가 오는 경우 처리
+      if (error.message && (error.message.includes('이미') || error.message.includes('기존') || error.message.includes('나가'))) {
+        Alert.alert('알림', '기존의 방을 나가주세요.');
+      } else {
+        Alert.alert('방 생성 실패', error.message || '방 생성에 실패했습니다.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -462,12 +486,17 @@ const CreateRoomModal = ({ visible, onClose, onComplete, nextRoomId = 100, onRoo
               <Text style={styles.footerButtonText}>초기화</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.footerButton, styles.completeButton]}
+              style={[styles.footerButton, styles.completeButton, loading && styles.completeButtonDisabled]}
               onPress={handleComplete}
+              disabled={loading}
             >
-              <Text style={[styles.footerButtonText, styles.completeButtonText]}>
-                완료
-              </Text>
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={[styles.footerButtonText, styles.completeButtonText]}>
+                  완료
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
             </>
@@ -758,6 +787,9 @@ const styles = StyleSheet.create({
   },
   completeButton: {
     backgroundColor: '#4A90E2',
+  },
+  completeButtonDisabled: {
+    opacity: 0.6,
   },
   footerButtonText: {
     fontSize: 16,

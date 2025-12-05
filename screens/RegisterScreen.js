@@ -7,7 +7,10 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { sendVerificationCode, verifyCode, signup } from '../services/authApi';
+import { saveUsername } from '../services/apiConfig';
 
 const RegisterScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -17,25 +20,47 @@ const RegisterScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [verificationLoading, setVerificationLoading] = useState(false);
 
-  const handleVerificationRequest = () => {
+  const handleVerificationRequest = async () => {
     if (!emailId.trim()) {
       Alert.alert('알림', '이메일 아이디를 입력하세요.');
       return;
     }
-    Alert.alert('알림', '인증번호가 전송되었습니다.');
+
+    setVerificationLoading(true);
+    try {
+      const email = `${emailId}@kangnam.ac.kr`;
+      await sendVerificationCode(email);
+      Alert.alert('알림', '인증번호가 전송되었습니다.');
+    } catch (error) {
+      Alert.alert('오류', error.message || '인증번호 발송에 실패했습니다.');
+    } finally {
+      setVerificationLoading(false);
+    }
   };
 
-  const handleVerification = () => {
+  const handleVerification = async () => {
     if (!verificationCode.trim()) {
       Alert.alert('알림', '인증번호를 입력하세요.');
       return;
     }
-    setIsEmailVerified(true);
-    Alert.alert('알림', '이메일 인증이 완료되었습니다.');
+
+    setVerificationLoading(true);
+    try {
+      const email = `${emailId}@kangnam.ac.kr`;
+      await verifyCode(email, verificationCode);
+      setIsEmailVerified(true);
+      Alert.alert('알림', '이메일 인증이 완료되었습니다.');
+    } catch (error) {
+      Alert.alert('오류', error.message || '인증번호 확인에 실패했습니다.');
+    } finally {
+      setVerificationLoading(false);
+    }
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!name.trim()) {
       Alert.alert('알림', '이름을 입력하세요.');
       return;
@@ -61,9 +86,20 @@ const RegisterScreen = ({ navigation }) => {
       return;
     }
 
-    Alert.alert('성공', '회원가입이 완료되었습니다.', [
-      { text: '확인', onPress: () => navigation.navigate('Login') }
-    ]);
+    setLoading(true);
+    try {
+      const email = `${emailId}@kangnam.ac.kr`;
+      await signup(name, email, password);
+      // 회원가입 성공 시 이름 저장
+      await saveUsername(name);
+      Alert.alert('성공', '회원가입이 완료되었습니다.', [
+        { text: '확인', onPress: () => navigation.navigate('Login') }
+      ]);
+    } catch (error) {
+      Alert.alert('오류', error.message || '회원가입에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = () => {
@@ -115,8 +151,16 @@ const RegisterScreen = ({ navigation }) => {
             <View style={styles.domainButton}>
               <Text style={styles.domainText}>@kangnam.ac.kr</Text>
             </View>
-            <TouchableOpacity style={styles.verifyButton} onPress={handleVerificationRequest}>
-              <Text style={styles.verifyButtonText}>인증요청</Text>
+            <TouchableOpacity 
+              style={styles.verifyButton} 
+              onPress={handleVerificationRequest}
+              disabled={verificationLoading}
+            >
+              {verificationLoading ? (
+                <ActivityIndicator size="small" color="#333" />
+              ) : (
+                <Text style={styles.verifyButtonText}>인증요청</Text>
+              )}
             </TouchableOpacity>
           </View>
           <View style={styles.verificationRow}>
@@ -127,8 +171,16 @@ const RegisterScreen = ({ navigation }) => {
               value={verificationCode}
               onChangeText={setVerificationCode}
             />
-            <TouchableOpacity style={styles.verifyConfirmButton} onPress={handleVerification}>
-              <Text style={styles.verifyConfirmButtonText}>인증확인</Text>
+            <TouchableOpacity 
+              style={styles.verifyConfirmButton} 
+              onPress={handleVerification}
+              disabled={verificationLoading}
+            >
+              {verificationLoading ? (
+                <ActivityIndicator size="small" color="#333" />
+              ) : (
+                <Text style={styles.verifyConfirmButtonText}>인증확인</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -159,8 +211,16 @@ const RegisterScreen = ({ navigation }) => {
         </View>
 
         {/* 회원가입 버튼 */}
-        <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-          <Text style={styles.registerButtonText}>회원가입</Text>
+        <TouchableOpacity 
+          style={[styles.registerButton, loading && styles.registerButtonDisabled]} 
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.registerButtonText}>회원가입</Text>
+          )}
         </TouchableOpacity>
 
         {/* 로그인 링크 */}
@@ -292,6 +352,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginBottom: 20,
+  },
+  registerButtonDisabled: {
+    opacity: 0.6,
   },
   registerButtonText: {
     color: 'white',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,11 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { getMyProfile } from '../services/myPageApi';
+import { getUsername } from '../services/apiConfig';
 
 const menuItems = [
   '프로필',
@@ -24,6 +28,49 @@ const MyPageScreen = ({ navigation, route }) => {
 
   const bank = route?.params?.bank || "";
   const accountNumber = route?.params?.accountNumber || "";
+  
+  const [username, setUsername] = useState(''); // 기본값
+  const [loading, setLoading] = useState(true);
+
+  // 프로필 정보 불러오기
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      // 먼저 AsyncStorage에서 회원가입 시 저장한 이름 가져오기
+      const savedName = await getUsername();
+      if (savedName) {
+        setUsername(savedName);
+      }
+      
+      // 서버에서 프로필 정보 가져오기 (서버에 저장된 이름이 있으면 우선 사용)
+      try {
+        const data = await getMyProfile();
+        if (data.name) {
+          setUsername(data.name);
+        }
+      } catch (apiError) {
+        console.error('프로필 조회 에러:', apiError);
+        // API 에러가 발생해도 AsyncStorage의 이름으로 계속 진행
+      }
+    } catch (error) {
+      console.error('이름 불러오기 에러:', error);
+      // 에러가 발생해도 기본값으로 계속 진행
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 화면이 포커스될 때마다 프로필 정보 다시 불러오기
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  // 프로필 화면에서 돌아올 때 이름 다시 불러오기
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [])
+  );
 
   const handleCopyAccount = (number) => {
     Alert.alert('복사 완료', `${number} 복사되었습니다.`);
@@ -71,7 +118,7 @@ const MyPageScreen = ({ navigation, route }) => {
       <ScrollView style={styles.container}>
         <View style={styles.profileSection}>
           <View style={styles.avatar} />
-          <Text style={styles.nameText}>강승재</Text>
+          <Text style={styles.nameText}>{username}</Text>
         </View>
 
         <View style={styles.accountSection}>

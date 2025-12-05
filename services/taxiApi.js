@@ -1,39 +1,38 @@
 // 택시 API 서비스
 // 백엔드 API 연동 함수들
-
-const API_BASE_URL = 'https://your-api-domain.com'; // 실제 API 주소로 변경 필요
-
-// 인증 토큰 가져오기 (AsyncStorage나 Context에서 가져올 예정)
-const getAuthToken = async () => {
-  // TODO: 실제 토큰 가져오기 로직 구현
-  return 'Bearer token'; // 임시
-};
+import { API_BASE_URL, getAuthHeaders } from './apiConfig';
 
 // ==================== 방 관련 API ====================
 
-// 방 생성
-export const createRoom = async (departure, destination, maxMembers, inviteCodeEnabled) => {
+// 방 생성 (Swagger 명세에 맞게 수정)
+// Swagger: POST /api/taxi/rooms
+// 요청: { meetingPoint, destination, meetingTime, capacity }
+export const createRoom = async (meetingPoint, destination, meetingTime, capacity) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
       body: JSON.stringify({
-        departure,
+        meetingPoint,
         destination,
-        max_members: maxMembers,
-        invite_code_enabled: inviteCodeEnabled,
+        meetingTime, // ISO 8601 형식 (예: "2024-01-01T10:00:00")
+        capacity,
       }),
     });
 
-    if (response.status === 201) {
-      return await response.json();
+    if (response.status === 200) {
+      const data = await response.json();
+      return data;
+    } else if (response.status === 400 || response.status === 409) {
+      // 400: Bad Request (이미 방이 있는 경우 등)
+      // 409: Conflict (이미 방이 있는 경우 등)
+      const error = await response.json().catch(() => ({}));
+      const errorMessage = error.message || error.error || '기존의 방을 나가주세요.';
+      throw new Error(errorMessage);
     } else {
-      const error = await response.json();
-      throw new Error(error.error || '방 생성 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방 생성 실패');
     }
   } catch (error) {
     console.error('방 생성 에러:', error);
@@ -42,9 +41,10 @@ export const createRoom = async (departure, destination, maxMembers, inviteCodeE
 };
 
 // 방 목록 조회
+// ⚠️ Swagger에 없는 API - 백엔드에 추가 요청 필요
 export const getRooms = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms`, {
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -64,9 +64,10 @@ export const getRooms = async () => {
 };
 
 // 특정 방 정보 조회
+// ⚠️ Swagger에 없는 API - 백엔드에 추가 요청 필요
 export const getRoomDetail = async (roomId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -87,28 +88,31 @@ export const getRoomDetail = async (roomId) => {
   }
 };
 
-// 방 참여
-export const joinRoom = async (roomId) => {
+// 방 참여 (Swagger 명세에 맞게 수정)
+// Swagger: POST /api/taxi/rooms/join
+// 요청: { roomCode }
+export const joinRoom = async (roomCode) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/join`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/join`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
+      body: JSON.stringify({
+        roomCode,
+      }),
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
     } else if (response.status === 400) {
-      const error = await response.json();
-      throw new Error(error.error || error.message || '인원 초과');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '인원 초과');
     } else if (response.status === 404) {
       throw new Error('Room not found');
     } else {
-      throw new Error('방 참여 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방 참여 실패');
     }
   } catch (error) {
     console.error('방 참여 에러:', error);
@@ -116,23 +120,51 @@ export const joinRoom = async (roomId) => {
   }
 };
 
+// 방 나가기
+// ✅ Swagger에 추가됨: POST /api/taxi/rooms/leave
+export const leaveRoom = async (roomCode) => {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/leave`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        roomCode,
+      }),
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      return data;
+    } else if (response.status === 400) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '정산이 완료되지 않아 나갈 수 없습니다.');
+    } else {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방 나가기 실패');
+    }
+  } catch (error) {
+    console.error('방 나가기 에러:', error);
+    throw error;
+  }
+};
+
 // 방 종료 (방장만 가능)
+// ⚠️ Swagger에 없는 API - 백엔드에 추가 요청 필요
 export const closeRoom = async (roomId) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/close`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomId}/close`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
       return data.data || data;
     } else {
-      throw new Error('방 종료 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방 종료 실패');
     }
   } catch (error) {
     console.error('방 종료 에러:', error);
@@ -143,27 +175,26 @@ export const closeRoom = async (roomId) => {
 // ==================== 메시지 관련 API ====================
 
 // 채팅 메시지 보내기
-export const sendMessage = async (roomId, message) => {
+// ✅ Swagger에 추가됨: POST /api/taxi/rooms/{roomCode}/messages
+export const sendMessage = async (roomCode, content) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/messages`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/messages`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
       body: JSON.stringify({
-        message,
+        content, // Swagger 명세: content 필드 사용
       }),
     });
 
-    if (response.status === 201) {
+    if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
     } else if (response.status === 404) {
       throw new Error('Room not found');
     } else {
-      throw new Error('메시지 전송 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '메시지 전송 실패');
     }
   } catch (error) {
     console.error('메시지 전송 에러:', error);
@@ -172,25 +203,31 @@ export const sendMessage = async (roomId, message) => {
 };
 
 // 채팅 메시지 조회
-export const getMessages = async (roomId, after = null) => {
+// ✅ Swagger에 추가됨: GET /api/taxi/rooms/{roomCode}/messages
+export const getMessages = async (roomCode, page = 0, size = 50) => {
   try {
-    let url = `${API_BASE_URL}/taxi/rooms/${roomId}/messages`;
-    if (after) {
-      url += `?after=${after}`;
-    }
+    const headers = await getAuthHeaders();
+    let url = `${API_BASE_URL}/api/taxi/rooms/${roomCode}/messages?page=${page}&size=${size}`;
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.messages || data.data || data;
+      // Swagger 명세: 배열로 직접 반환하거나 Page 객체로 반환
+      // 배열인 경우 그대로 반환, 객체인 경우 content 필드 확인
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && Array.isArray(data.content)) {
+        return data; // Page 객체 반환 (content 필드 포함)
+      } else {
+        return data.messages || data.data || [];
+      }
     } else {
-      throw new Error('메시지 조회 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '메시지 조회 실패');
     }
   } catch (error) {
     console.error('메시지 조회 에러:', error);
@@ -201,30 +238,29 @@ export const getMessages = async (roomId, after = null) => {
 // ==================== 운행 수락 관련 API ====================
 
 // 운행 시작 API
-export const startOperation = async (roomId) => {
+// ✅ Swagger: POST /api/taxi/rooms/{roomCode}/operation/start
+export const startOperation = async (roomCode) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/operation/start`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/operation/start`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
     } else if (response.status === 400) {
-      const error = await response.json();
-      throw new Error(error.error || error.message || '운행 시작 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '운행 시작 실패');
     } else if (response.status === 404) {
       throw new Error('Room not found');
-    } else if (response.status === 409) {
-      const error = await response.json();
-      throw new Error(error.error || error.message || '이미 운행이 시작되었습니다.');
+    } else if (response.status === 403) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방장만 운행을 시작할 수 있습니다.');
     } else {
-      throw new Error('운행 시작 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '운행 시작 실패');
     }
   } catch (error) {
     console.error('운행 시작 에러:', error);
@@ -233,27 +269,29 @@ export const startOperation = async (roomId) => {
 };
 
 // 운행 수락 API
-export const acceptOperation = async (roomId) => {
+// ✅ Swagger: POST /api/taxi/rooms/{roomCode}/operation/accept
+export const acceptOperation = async (roomCode) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/operation/accept`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/operation/accept`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
     } else if (response.status === 400) {
-      const error = await response.json();
-      throw new Error(error.error || error.message || '운행 수락 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '운행 수락 실패');
     } else if (response.status === 404) {
       throw new Error('Room not found');
+    } else if (response.status === 403) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방장은 수락할 수 없습니다.');
     } else {
-      throw new Error('운행 수락 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '운행 수락 실패');
     }
   } catch (error) {
     console.error('운행 수락 에러:', error);
@@ -262,29 +300,23 @@ export const acceptOperation = async (roomId) => {
 };
 
 // 운행 수락 상태 조회 API
-export const getOperationStatus = async (roomId, lastAcceptedAt = null) => {
+// ✅ Swagger: GET /api/taxi/rooms/{roomCode}/operation/status
+export const getOperationStatus = async (roomCode) => {
   try {
-    let url = `${API_BASE_URL}/taxi/rooms/${roomId}/operation/status`;
-    if (lastAcceptedAt) {
-      url += `?last_accepted_at=${lastAcceptedAt}`;
-    }
-
-    const token = await getAuthToken();
-    const response = await fetch(url, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/operation/status`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
     } else if (response.status === 404) {
       throw new Error('Room not found');
     } else {
-      throw new Error('운행 상태 조회 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '운행 상태 조회 실패');
     }
   } catch (error) {
     console.error('운행 상태 조회 에러:', error);
@@ -292,57 +324,66 @@ export const getOperationStatus = async (roomId, lastAcceptedAt = null) => {
   }
 };
 
-// 운행 종료 API
-export const endOperation = async (roomId) => {
+// 운행 출발 확정 API (운행 종료)
+// ✅ Swagger: POST /api/taxi/rooms/{roomCode}/operation/end
+export const endOperation = async (roomCode) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/operation/end`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/operation/end`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
     } else if (response.status === 400) {
-      const error = await response.json();
-      throw new Error(error.error || error.message || '운행 종료 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '운행 출발 실패');
     } else if (response.status === 404) {
       throw new Error('Room not found');
+    } else if (response.status === 403) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방장만 출발을 확정할 수 있습니다.');
     } else {
-      throw new Error('운행 종료 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '운행 출발 실패');
     }
   } catch (error) {
-    console.error('운행 종료 에러:', error);
+    console.error('운행 출발 에러:', error);
     throw error;
   }
 };
 
 // ==================== 정산 관련 API ====================
 
-// 정산 금액 입력 (방장만 가능)
-export const createSplit = async (roomId, totalAmount) => {
+// 정산 생성 API (방장만 가능)
+// ✅ Swagger: POST /api/taxi/rooms/{roomCode}/split
+export const createSplit = async (roomCode, totalAmount) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/split`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/split`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
       body: JSON.stringify({
-        total_amount: totalAmount,
+        totalAmount,
       }),
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
+    } else if (response.status === 400) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '정산 생성 실패');
+    } else if (response.status === 404) {
+      throw new Error('Room not found');
+    } else if (response.status === 403) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '방장만 정산을 생성할 수 있습니다.');
     } else {
-      throw new Error('정산 생성 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '정산 생성 실패');
     }
   } catch (error) {
     console.error('정산 생성 에러:', error);
@@ -350,21 +391,24 @@ export const createSplit = async (roomId, totalAmount) => {
   }
 };
 
-// 정산 정보 조회
-export const getSplit = async (roomId) => {
+// 정산 정보 조회 API
+// ✅ Swagger: GET /api/taxi/rooms/{roomCode}/split
+export const getSplit = async (roomCode) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/split`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/split`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
+    } else if (response.status === 404) {
+      throw new Error('정산 정보를 찾을 수 없습니다.');
     } else {
-      throw new Error('정산 정보 조회 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '정산 정보 조회 실패');
     }
   } catch (error) {
     console.error('정산 정보 조회 에러:', error);
@@ -372,23 +416,27 @@ export const getSplit = async (roomId) => {
   }
 };
 
-// 송금 완료 체크
-export const confirmPayment = async (roomId) => {
+// 송금 완료 체크 API
+// ✅ Swagger: POST /api/taxi/rooms/{roomCode}/split/confirm
+export const confirmPayment = async (roomCode) => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/taxi/rooms/${roomId}/split/confirm`, {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/${roomCode}/split/confirm`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
     });
 
     if (response.status === 200) {
       const data = await response.json();
-      return data.data || data;
+      return data;
+    } else if (response.status === 400) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '송금 완료 체크 실패');
+    } else if (response.status === 404) {
+      throw new Error('정산 정보를 찾을 수 없습니다.');
     } else {
-      throw new Error('송금 완료 체크 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '송금 완료 체크 실패');
     }
   } catch (error) {
     console.error('송금 완료 체크 에러:', error);
@@ -398,28 +446,26 @@ export const confirmPayment = async (roomId) => {
 
 // ==================== 신고 관련 API ====================
 
-// 분실물 신고
+// 분실물 신고 (Swagger 명세에 맞게 수정)
+// Swagger: POST /lost-and-found
 export const reportLostAndFound = async (reportData) => {
   try {
-    const token = await getAuthToken();
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/lost-and-found`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
       body: JSON.stringify({
         location: reportData.location,
         description: reportData.description,
       }),
     });
 
-    if (response.status === 201) {
+    if (response.status === 200) {
       const data = await response.json();
       return data;
     } else {
-      const error = await response.json();
-      throw new Error(error.error || '분실물 신고 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '분실물 신고 실패');
     }
   } catch (error) {
     console.error('분실물 신고 에러:', error);
@@ -427,16 +473,14 @@ export const reportLostAndFound = async (reportData) => {
   }
 };
 
-// 이용자 신고
+// 이용자 신고 (Swagger 명세에 맞게 수정)
+// Swagger: POST /me/report
 export const reportUser = async (reportData) => {
   try {
-    const token = await getAuthToken();
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/me/report`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers,
       body: JSON.stringify({
         reported_user_id: reportData.reported_user_id,
         reason: reportData.reason,
@@ -444,12 +488,12 @@ export const reportUser = async (reportData) => {
       }),
     });
 
-    if (response.status === 201) {
+    if (response.status === 200) {
       const data = await response.json();
       return data;
     } else {
-      const error = await response.json();
-      throw new Error(error.error || '이용자 신고 실패');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || '이용자 신고 실패');
     }
   } catch (error) {
     console.error('이용자 신고 에러:', error);

@@ -6,14 +6,18 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { login } from '../services/authApi';
 
 const LoginScreen = ({ navigation }) => {
   const [emailId, setEmailId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!emailId.trim()) {
       setError('학교 이메일 앞부분을 입력하세요.');
       return;
@@ -23,10 +27,25 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
-    navigation.replace('Main', {
-      email: `${emailId}@kangnam.ac.kr`,
-      password: password,
-    });
+    setError('');
+    setLoading(true);
+
+    try {
+      const email = `${emailId}@kangnam.ac.kr`;
+      const result = await login(email, password);
+      
+      if (result.success) {
+        // 로그인 성공 - 메인 화면으로 이동
+        navigation.replace('Main', {
+          email: email,
+        });
+      }
+    } catch (error) {
+      setError(error.message || '로그인에 실패했습니다.');
+      Alert.alert('로그인 실패', error.message || '로그인에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignup = () => {
@@ -70,8 +89,16 @@ const LoginScreen = ({ navigation }) => {
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>로그인</Text>
+        <TouchableOpacity 
+          style={[styles.loginButton, loading && styles.loginButtonDisabled]} 
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.loginButtonText}>로그인</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={handleSignup}>
@@ -167,6 +194,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginBottom: 20,
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
   },
   loginButtonText: {
     color: 'white',

@@ -8,9 +8,11 @@ import {
   Image,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { reportLostAndFound, reportUser } from '../services/taxiApi';
 
 const ReportScreen = ({ navigation, route }) => {
   const { roomData } = route.params || {};
@@ -18,6 +20,7 @@ const ReportScreen = ({ navigation, route }) => {
   const [itemName, setItemName] = useState('');
   const [details, setDetails] = useState('');
   const [photo, setPhoto] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -38,14 +41,28 @@ const ReportScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!itemName || !details) {
       Alert.alert('입력 오류', '모든 항목을 입력해주세요.');
       return;
     }
-    Alert.alert('신고 완료', '분실물이 성공적으로 신고되었습니다.', [
-      { text: '확인', onPress: () => navigation.goBack() }
-    ]);
+
+    setLoading(true);
+    try {
+      // 분실물 신고 API 호출
+      await reportLostAndFound({
+        location: itemName,
+        description: details,
+      });
+      
+      Alert.alert('신고 완료', '분실물이 성공적으로 신고되었습니다.', [
+        { text: '확인', onPress: () => navigation.goBack() }
+      ]);
+    } catch (error) {
+      Alert.alert('신고 실패', error.message || '분실물 신고에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -95,8 +112,16 @@ const ReportScreen = ({ navigation, route }) => {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-        <Text style={styles.submitButtonText}>신고하기</Text>
+      <TouchableOpacity 
+        style={[styles.submitButton, loading && styles.submitButtonDisabled]} 
+        onPress={handleSubmit}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text style={styles.submitButtonText}>신고하기</Text>
+        )}
       </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -201,6 +226,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     paddingVertical: 15,
     borderRadius: 10,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitButtonText: {
     color: '#FFF',

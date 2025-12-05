@@ -9,7 +9,6 @@ import {
   Modal,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import CreateRoomModal from '../modal/CreateRoomModal';
 import InviteCodeModal from '../modal/InviteCodeModal';
 import MemberCounter from '../components/MemberCounter';
@@ -99,6 +98,11 @@ const TaxiScreen = ({ navigation }) => {
 
   // 방 생성 모달 열기
   const handleCreateRoom = () => {
+    // 이미 참여중인 방이 있는지 확인 (방 생성은 1개만 가능)
+    if (participatingRooms.length > 0) {
+      Alert.alert('알림', '기존의 방을 나가주세요.');
+      return;
+    }
     setCreateRoomModalVisible(true);
   };
 
@@ -218,10 +222,10 @@ const TaxiScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      
-      {/* 상단 헤더 */}
+
+
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton}>
           <Text style={styles.headerButtonText}>Kangnam Taxi</Text>
@@ -385,30 +389,39 @@ const TaxiScreen = ({ navigation }) => {
                       // 선택된 방 정보 저장 (초대코드 검증용)
                       setSelectedRoomForInvite(room);
                     } else {
-                      // 자유롭게 입장
-                      const updatedRoomData = {
-                        ...room,
-                        current_count: (room.current_count || 0) + 1,
-                      };
-                      
-                      // 채팅방으로 이동
-                      navigateToChat(updatedRoomData, false);
-                      
-                      // API 호출 주석 처리 (나중에 활성화)
-                      // try {
-                      //   const response = await joinRoom(room.room_id);
-                      //   const updatedRoomData = await getRoomDetail(room.room_id);
-                      //   navigateToChat(updatedRoomData, false);
-                      // } catch (error) {
-                      //   console.error('방 참여 에러:', error);
-                      //   if (error.message === 'Room is full' || error.message.includes('인원 초과')) {
-                      //     Alert.alert('알림', '인원이 가득 찼습니다.');
-                      //   } else if (error.message === 'Room not found') {
-                      //     Alert.alert('알림', '존재하지 않는 방입니다.');
-                      //   } else {
-                      //     Alert.alert('알림', error.message || '방 참여에 실패했습니다.');
-                      //   }
-                      // }
+                      // 자유롭게 입장 - 백엔드 API 연동
+                      try {
+                        const roomCode = room.roomCode || room.invite_code || room.room_id?.toString();
+                        const response = await joinRoom(roomCode);
+                        
+                        // API 응답을 UI 형식에 맞게 변환
+                        const updatedRoomData = {
+                          room_id: response.id || room.room_id,
+                          roomCode: response.roomCode || roomCode,
+                          departure: response.meetingPoint || room.departure,
+                          destination: response.destination || room.destination,
+                          max_members: response.capacity || room.max_members,
+                          current_count: response.memberCount || (room.current_count || 0) + 1,
+                          host_id: response.leaderId || room.host_id,
+                          status: response.status || room.status,
+                          invite_code: response.roomCode,
+                          invite_code_enabled: room.invite_code_enabled,
+                          meetingTime: response.meetingTime || room.meetingTime,
+                          time: room.time || new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                        };
+                        
+                        // 채팅방으로 이동
+                        navigateToChat(updatedRoomData, false);
+                      } catch (error) {
+                        console.error('방 참여 에러:', error);
+                        if (error.message === 'Room is full' || error.message.includes('인원 초과')) {
+                          Alert.alert('알림', '인원이 가득 찼습니다.');
+                        } else if (error.message === 'Room not found') {
+                          Alert.alert('알림', '존재하지 않는 방입니다.');
+                        } else {
+                          Alert.alert('알림', error.message || '방 참여에 실패했습니다.');
+                        }
+                      }
                     }
                   }}
                   disabled={currentCount >= maxMembers}
@@ -448,7 +461,7 @@ const TaxiScreen = ({ navigation }) => {
         targetRoom={selectedRoomForInvite}
         allRooms={[...availableRooms, ...participatingRooms]}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 

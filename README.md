@@ -101,3 +101,9 @@ To learn more, take a look at the following resources:
 - [React Native Website](https://reactnative.dev) - learn more about React Native.
 - [Expo Blog](https://blog.expo.dev/) - read the latest Expo blog posts.
 - [React Native Blog](https://reactnative.dev/blog) - read the latest React Native blog posts.
+
+# 개발 역할
+
+- 브랜치 realMaster 생성, 홈, 택시, 마이페이지 합침
+- 신고기능 재구현
+
