@@ -406,7 +406,7 @@ export const endOperation = async (roomCode) => {
 
 // ==================== 정산 관련 API ====================
 
-// 정산 생성 API (방장만 가능)
+// 정산 생성 API (모든 사용자 가능)
 // ✅ Swagger: POST /api/taxi/rooms/{roomCode}/split
 export const createSplit = async (roomCode, totalAmount) => {
   try {
@@ -429,7 +429,7 @@ export const createSplit = async (roomCode, totalAmount) => {
       throw new Error('Room not found');
     } else if (response.status === 403) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '방장만 정산을 생성할 수 있습니다.');
+      throw new Error(error.message || error.error || '정산 생성 권한이 없습니다.');
     } else {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.message || error.error || '정산 생성 실패');

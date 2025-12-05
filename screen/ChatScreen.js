@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MemberCounter from '../components/MemberCounter';
 import SettlementModal from '../modal/SettlementModal';
-import { sendMessage, getMessages, startOperation, endOperation, leaveRoom, createSplit, getSplit, confirmPayment, getRoomDetail } from '../services/taxiApi';
+import { sendMessage, getMessages, startOperation, endOperation, leaveRoom, getRoomDetail } from '../services/taxiApi';
 import { getDepositStatus } from '../services/depositApi';
 import { getUsername, getUserId, saveUserId, getAccountInfo } from '../services/apiConfig';
 import { getMyProfile } from '../services/myPageApi';
@@ -160,8 +160,7 @@ const ChatScreen = ({ navigation, route }) => {
     if (messages.length === 0) return;
     
     const hasOperationStarted = messages.some(msg => 
-      msg.type === 'operation_started' && 
-      (msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
+      (msg.type === 'operation_started' || msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
     );
     
     // 운행이 시작되었으면 상태 복원 (아직 시작하지 않았을 때만)
@@ -342,8 +341,7 @@ const ChatScreen = ({ navigation, route }) => {
               
               // 운행 시작 메시지가 새로 추가되었는지 확인 (실제 운행 시작 메시지인지 확인)
               const hasNewOperationStarted = uniqueNewMessages.some(msg => 
-                msg.type === 'operation_started' && 
-                (msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
+                (msg.type === 'operation_started' || msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
               );
               if (hasNewOperationStarted) {
                 console.log('Polling: 새로운 운행 시작 메시지 감지, 상태 업데이트');
@@ -361,8 +359,7 @@ const ChatScreen = ({ navigation, route }) => {
               // 새 메시지는 없지만, 기존 메시지에서 운행 시작 상태 확인 (메시지가 업데이트되었을 수 있음)
               // 실제 운행 시작 메시지인지 확인
               const hasOperationStarted = formattedMessages.some(msg => 
-                msg.type === 'operation_started' && 
-                (msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
+                (msg.type === 'operation_started' || msg.message === '운행이 시작되었습니다.' || msg.message?.includes('운행이 시작되었습니다'))
               );
               
               if (hasOperationStarted && !isOperationStarted) {
@@ -403,12 +400,17 @@ const ChatScreen = ({ navigation, route }) => {
         }
         
         // 방 정보 업데이트 (인원수 등)
-        setRoomData(prev => ({
-          ...prev,
-          current_count: updatedRoomInfo.memberCount || updatedRoomInfo.current_count || prev?.current_count,
-          max_members: updatedRoomInfo.capacity || updatedRoomInfo.max_members || prev?.max_members,
-          status: updatedRoomInfo.status || prev?.status,
-        }));
+        // null 체크 추가
+        if (updatedRoomInfo && typeof updatedRoomInfo === 'object') {
+          setRoomData(prev => ({
+            ...prev,
+            current_count: updatedRoomInfo.memberCount || updatedRoomInfo.current_count || prev?.current_count,
+            max_members: (updatedRoomInfo.capacity !== null && updatedRoomInfo.capacity !== undefined) 
+              ? updatedRoomInfo.capacity 
+              : (updatedRoomInfo.max_members || prev?.max_members || 4),
+            status: updatedRoomInfo.status || prev?.status,
+          }));
+        }
       } catch (error) {
         // 에러 발생 시 조용히 처리 (Polling은 계속 진행)
         // console.log('방 정보 Polling 실패:', error.message);
@@ -420,7 +422,7 @@ const ChatScreen = ({ navigation, route }) => {
     };
   }, [roomData?.roomCode, roomData?.room_id]);
 
-  // 송금 완료 처리 (useCallback으로 메모이제이션)
+  // 송금 완료 처리 (프론트엔드만 처리, useCallback으로 메모이제이션)
   const handlePaymentComplete = useCallback(async (paymentMethod) => {
     if (!myUserId) return; // myUserId가 없으면 처리하지 않음
     
@@ -432,31 +434,56 @@ const ChatScreen = ({ navigation, route }) => {
     try {
       const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
       
-      // 송금 완료 체크 API 호출
-      const response = await confirmPayment(roomCode);
-      
-      // 현재 사용자를 송금 완료 목록에 추가
+      // 현재 사용자를 송금 완료 목록에 추가 (프론트엔드만 처리)
       setPaidUsers(prevPaidUsers => [...prevPaidUsers, myUserId]);
       
       // 정산 메시지 찾기 및 송금 완료 메시지 추가
       setMessages(prevMessages => {
         const settlementMessage = prevMessages.find(msg => msg.type === 'settlement');
         let totalMembers = 0;
-        let completedCount = response.paidCount || (paidUsers.length + 1);
+        let completedCount = paidUsers.length + 1; // 현재 사용자 포함
         
         if (settlementMessage && settlementMessage.settlementData) {
           totalMembers = settlementMessage.settlementData.memberCount || Object.keys(settlementMessage.settlementData.individualCosts || {}).length;
         }
         
-        // 송금 완료 메시지 추가 (완료 인원 수 포함)
+        // 송금 완료 메시지를 채팅 메시지로 전송 (API 호출)
+        const paymentMessageText = totalMembers > 0 
+          ? `송금이 완료되었습니다. (${completedCount}/${totalMembers})`
+          : '송금이 완료되었습니다.';
+        
+        // 메시지 전송은 비동기로 처리하되, 로컬 상태는 즉시 업데이트
+        sendMessage(roomCode, paymentMessageText).then(messageResponse => {
+          const paymentMessage = {
+            message_id: messageResponse.id || messageResponse.messageId || messageResponse.message_id || Date.now(),
+            room_id: messageResponse.roomCode || messageResponse.roomId || messageResponse.room_id || roomData?.room_id,
+            sender_id: myUserId ? String(myUserId) : null,
+            sender_name: myProfileName || '나',
+            message: messageResponse.content || messageResponse.message || paymentMessageText,
+            created_at: messageResponse.createdAt || messageResponse.created_at || new Date().toISOString(),
+            time: new Date(messageResponse.createdAt || messageResponse.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+            type: 'payment_complete',
+          };
+          
+          setMessages(prev => {
+            const updated = [...prev, paymentMessage];
+            return updated.sort((a, b) => {
+              const timeA = new Date(a.created_at).getTime();
+              const timeB = new Date(b.created_at).getTime();
+              return timeA - timeB;
+            });
+          });
+        }).catch(error => {
+          console.error('송금 완료 메시지 전송 실패:', error);
+        });
+        
+        // 로컬 상태는 즉시 업데이트 (메시지 전송과 별개)
         const paymentMessage = {
           message_id: Date.now(),
           room_id: roomData?.room_id,
-          sender_id: null,
-          sender_name: '시스템',
-          message: totalMembers > 0 
-            ? `송금이 완료되었습니다. (${completedCount}/${totalMembers})`
-            : '송금이 완료되었습니다.',
+          sender_id: myUserId ? String(myUserId) : null,
+          sender_name: myProfileName || '나',
+          message: paymentMessageText,
           created_at: new Date().toISOString(),
           time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
           type: 'payment_complete',
@@ -827,17 +854,13 @@ const ChatScreen = ({ navigation, route }) => {
 
 
 
-  // 정산 전송 핸들러 (모든 사용자 가능)
+  // 정산 전송 핸들러 (모든 사용자 가능, 프론트엔드만 처리)
   const handleSettlementSubmit = async (settlementData) => {
     
     // 운행이 시작되지 않았으면 정산 불가
-    const hasOperationStarted = messages.some(msg => 
-      msg.type === 'operation_started' || 
-      (msg.type === 'operation_start' && msg.message === '운행이 시작되었습니다.')
-    );
-    
-    if (!hasOperationStarted) {
-      Alert.alert('알림', '운행을 시작해야 작동됩니다.');
+    // isOperationStarted state를 직접 확인 (메시지 확인보다 정확함)
+    if (!isOperationStarted) {
+      Alert.alert('알림', '운행을 시작해야 정산할 수 있습니다.');
       return;
     }
     
@@ -856,17 +879,16 @@ const ChatScreen = ({ navigation, route }) => {
       setRoomData(prev => ({
         ...prev,
         current_count: actualMemberCount,
-        max_members: latestRoomInfo.capacity || latestRoomInfo.max_members || prev?.max_members,
+        max_members: (latestRoomInfo && latestRoomInfo.capacity !== null && latestRoomInfo.capacity !== undefined) 
+          ? latestRoomInfo.capacity 
+          : (latestRoomInfo?.max_members || prev?.max_members),
       }));
       
-      // 정산 생성 API 호출
-      const response = await createSplit(roomCode, totalAmount);
-      
-      // API 응답에서 정산 정보 가져오기
-      const totalCost = response.totalAmount || totalAmount;
-      const memberCount = response.memberCount || actualMemberCount; // 최신 인원수 사용
-      const amountPerPerson = response.amountPerPerson || Math.floor(totalCost / memberCount);
-      const individualCosts = response.individualCosts || settlementData.individualCosts;
+      // 프론트엔드에서 정산 정보 계산 (API 호출 없음)
+      const totalCost = totalAmount;
+      const memberCount = actualMemberCount; // 최신 인원수 사용
+      const amountPerPerson = Math.floor(totalCost / memberCount);
+      const individualCosts = settlementData.individualCosts || {};
       
       // 정산 정보를 일반 채팅 메시지로 전송
       const currentUserId = await getUserId();
@@ -890,7 +912,6 @@ const ChatScreen = ({ navigation, route }) => {
         time: new Date(messageResponse.createdAt || messageResponse.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
         type: 'settlement', // 정산 메시지 타입
         settlementData: {
-          splitId: response.splitId,
           totalCost,
           memberCount,
           amountPerPerson,
@@ -912,7 +933,7 @@ const ChatScreen = ({ navigation, route }) => {
       setPaidUsers([]);
       
       // 디버깅: 정산 메시지 생성 확인
-      console.log('정산 메시지 생성 완료, isHost:', isHost);
+      console.log('정산 메시지 생성 완료 (프론트엔드만 처리)');
     } catch (error) {
       Alert.alert('오류', error.message || '정산 생성에 실패했습니다.');
     }
@@ -958,40 +979,67 @@ const ChatScreen = ({ navigation, route }) => {
   };
 
 
-  // 정산 상태 Polling (정산 생성 후 3초마다)
+  // 정산 상태 확인 (프론트엔드만 처리, 메시지에서 송금 완료 상태 확인)
   useEffect(() => {
     const settlementMessage = messages.find(msg => msg.type === 'settlement');
-    if (!settlementMessage || !roomData?.room_id || isDeparted === false) return;
+    if (!settlementMessage || !settlementMessage.settlementData || !roomData?.room_id) return;
     
-    const settlementPolling = setInterval(async () => {
-      try {
+    // 메시지에서 송금 완료 메시지 찾기
+    const paymentCompleteMessages = messages.filter(msg => 
+      msg.type === 'payment_complete' && msg.sender_id
+    );
+    
+    // 송금 완료한 사용자 ID 목록 추출
+    const paidUserIds = paymentCompleteMessages
+      .map(msg => msg.sender_id)
+      .filter(id => id !== null && id !== undefined);
+    
+    // 중복 제거
+    const uniquePaidUserIds = [...new Set(paidUserIds)];
+    setPaidUsers(uniquePaidUserIds);
+    
+    // 모든 참여자가 송금 완료했는지 확인
+    const totalMembers = settlementMessage.settlementData.memberCount || 0;
+    if (totalMembers > 0 && uniquePaidUserIds.length >= totalMembers) {
+      // 모든 참여자가 송금 완료했는지 확인 (한 번만 알림 표시)
+      const allPaidMessage = messages.find(msg => 
+        msg.type === 'all_payment_complete' || 
+        (msg.message && msg.message.includes('모든 참여자의 송금이 완료되었습니다'))
+      );
+      
+      if (!allPaidMessage) {
+        // 모든 참여자 송금 완료 메시지 전송
         const roomCode = roomData.roomCode || roomData.invite_code || roomData.room_id?.toString();
-        const splitData = await getSplit(roomCode);
+        const completeMessageText = '모든 참여자의 송금이 완료되었습니다. 이제 채팅방을 나갈 수 있습니다.';
         
-        // 서버에서 받은 송금 완료 사용자 목록으로 업데이트
-        if (splitData.paidMembers && Array.isArray(splitData.paidMembers)) {
-          const serverPaidUserIds = splitData.paidMembers.map(id => String(id));
-          setPaidUsers(serverPaidUserIds);
-        }
-        
-        // 정산 상태가 COMPLETED로 변경되었는지 확인
-        if (splitData.status === 'COMPLETED') {
-          Alert.alert('알림', '모든 참여자의 송금이 완료되었습니다. 이제 채팅방을 나갈 수 있습니다.');
-        }
-      } catch (error) {
-        // 정산이 아직 생성되지 않았으면 에러 무시
-        if (error.message && !error.message.includes('정산 정보를 찾을 수 없습니다')) {
-          console.log('정산 상태 Polling 실패:', error.message);
-        }
+        sendMessage(roomCode, completeMessageText).then(messageResponse => {
+          const completeMessage = {
+            message_id: messageResponse.id || messageResponse.messageId || messageResponse.message_id || Date.now(),
+            room_id: messageResponse.roomCode || messageResponse.roomId || messageResponse.room_id || roomData?.room_id,
+            sender_id: null,
+            sender_name: '시스템',
+            message: messageResponse.content || messageResponse.message || completeMessageText,
+            created_at: messageResponse.createdAt || messageResponse.created_at || new Date().toISOString(),
+            time: new Date(messageResponse.createdAt || messageResponse.created_at || new Date()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+            type: 'all_payment_complete',
+          };
+          
+          setMessages(prev => {
+            const updated = [...prev, completeMessage];
+            return updated.sort((a, b) => {
+              const timeA = new Date(a.created_at).getTime();
+              const timeB = new Date(b.created_at).getTime();
+              return timeA - timeB;
+            });
+          });
+        }).catch(error => {
+          console.error('송금 완료 메시지 전송 실패:', error);
+        });
       }
-    }, 3000);
-    
-    return () => {
-      clearInterval(settlementPolling);
-    };
-  }, [messages, roomData?.room_id, roomData?.roomCode, isDeparted]);
+    }
+  }, [messages, roomData?.room_id, roomData?.roomCode, myProfileName]);
 
-  // 모든 참여자가 송금을 완료했는지 확인
+  // 모든 참여자가 송금을 완료했는지 확인 (프론트엔드만 처리)
   const checkAllPaymentsComplete = () => {
     // 정산 메시지 찾기
     const settlementMessage = messages.find(msg => msg.type === 'settlement');
@@ -999,16 +1047,19 @@ const ChatScreen = ({ navigation, route }) => {
       return true; // 정산 메시지가 없으면 나가기 허용
     }
     
-    const individualCosts = settlementMessage.settlementData.individualCosts || {};
-    const allMembers = Object.keys(individualCosts);
-    const totalMembers = allMembers.length;
+    const totalMembers = settlementMessage.settlementData.memberCount || 0;
     
-    // 송금 완료 메시지 개수 확인 (각 참여자가 송금하면 payment_complete 메시지가 생성됨)
-    const paymentCompleteMessages = messages.filter(msg => msg.type === 'payment_complete');
-    const completedPayments = paymentCompleteMessages.length;
+    // 송금 완료 메시지에서 사용자 ID 추출
+    const paymentCompleteMessages = messages.filter(msg => 
+      msg.type === 'payment_complete' && msg.sender_id
+    );
+    const paidUserIds = paymentCompleteMessages
+      .map(msg => msg.sender_id)
+      .filter(id => id !== null && id !== undefined);
+    const uniquePaidUserIds = [...new Set(paidUserIds)];
     
     // 모든 참여자가 송금을 완료했는지 확인
-    return completedPayments >= totalMembers;
+    return uniquePaidUserIds.length >= totalMembers;
   };
 
   // 채팅방 나가기

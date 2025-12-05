@@ -41,6 +41,8 @@ const TaxiScreen = ({ navigation }) => {
 
   // 초기 로드 완료 여부 추적
   const isInitialLoadComplete = useRef(false);
+  // availableRooms 참조 (polling에서 사용)
+  const availableRoomsRef = useRef(availableRooms);
   
   // 컴포넌트 마운트 시 참여중인 채팅방 목록 불러오기
   useEffect(() => {
@@ -86,7 +88,7 @@ const TaxiScreen = ({ navigation }) => {
                 roomCode: room.roomCode, // Swagger: roomCode
                 departure: room.meetingPoint, // Swagger: meetingPoint
                 destination: room.destination, // Swagger: destination
-                max_members: room.capacity || 4, // Swagger: capacity (기본값 4)
+                max_members: (room.capacity !== null && room.capacity !== undefined) ? room.capacity : 4, // Swagger: capacity (기본값 4)
                 current_count: room.memberCount || 0, // Swagger: memberCount (기본값 0)
                 host_id: room.leaderId, // Swagger: leaderId
                 status: room.status || 'OPEN', // Swagger: status (기본값 OPEN)
@@ -152,7 +154,7 @@ const TaxiScreen = ({ navigation }) => {
                 roomCode: room.roomCode, // Swagger: roomCode
                 departure: room.meetingPoint, // Swagger: meetingPoint
                 destination: room.destination, // Swagger: destination
-                max_members: room.capacity || 4, // Swagger: capacity (기본값 4)
+                max_members: (room.capacity !== null && room.capacity !== undefined) ? room.capacity : 4, // Swagger: capacity (기본값 4)
                 current_count: room.memberCount || 0, // Swagger: memberCount (기본값 0)
                 host_id: room.leaderId, // Swagger: leaderId
                 status: room.status || 'OPEN', // Swagger: status (기본값 OPEN)
@@ -195,6 +197,88 @@ const TaxiScreen = ({ navigation }) => {
   //     });
   //   }
   // }, [participatingRooms]);
+
+  // availableRooms ref 업데이트
+  useEffect(() => {
+    availableRoomsRef.current = availableRooms;
+  }, [availableRooms]);
+
+  // 방 인원 실시간 업데이트 Polling (5초마다)
+  useEffect(() => {
+    if (!isInitialLoadComplete.current) return; // 초기 로드 완료 후에만 실행
+    
+    const roomInfoPolling = setInterval(async () => {
+      try {
+        // 참여중인 방 목록 업데이트
+        const myRooms = await getMyRooms();
+        if (myRooms && Array.isArray(myRooms) && myRooms.length > 0) {
+          const formattedRooms = myRooms
+            .filter(room => room && room.id)
+            .map(room => {
+              return {
+                room_id: room.id,
+                roomCode: room.roomCode,
+                departure: room.meetingPoint,
+                destination: room.destination,
+                max_members: (room.capacity !== null && room.capacity !== undefined) ? room.capacity : 4,
+                current_count: room.memberCount || 0,
+                host_id: room.leaderId,
+                status: room.status || 'OPEN',
+                invite_code: room.roomCode || room.invite_code,
+                invite_code_enabled: room.invite_code_enabled !== undefined ? room.invite_code_enabled : true,
+                meetingTime: room.meetingTime || new Date().toISOString(),
+                time: room.meetingTime 
+                  ? new Date(room.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                  : new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                isPublic: room.isPublic !== undefined ? room.isPublic : true,
+              };
+            });
+          
+          setParticipatingRooms(formattedRooms);
+        }
+        
+        // 참여 가능한 방 목록 업데이트
+        const allRooms = await getRooms();
+        if (allRooms && Array.isArray(allRooms) && allRooms.length > 0) {
+          const formattedRooms = allRooms
+            .filter(room => room && room.id)
+            .map(room => {
+              const existingRoom = availableRoomsRef.current.find(r => r.room_id === room.id);
+              return {
+                room_id: room.id,
+                roomCode: room.roomCode,
+                departure: room.meetingPoint,
+                destination: room.destination,
+                max_members: (room.capacity !== null && room.capacity !== undefined) ? room.capacity : 4,
+                current_count: room.memberCount || 0,
+                host_id: room.leaderId,
+                status: room.status || 'OPEN',
+                invite_code: room.roomCode,
+                invite_code_enabled: room.invite_code_enabled !== undefined 
+                  ? room.invite_code_enabled 
+                  : (existingRoom?.invite_code_enabled !== undefined ? existingRoom.invite_code_enabled : false),
+                meetingTime: room.meetingTime || new Date().toISOString(),
+                time: room.meetingTime 
+                  ? new Date(room.meetingTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                  : new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                isPublic: room.isPublic !== undefined 
+                  ? room.isPublic 
+                  : (existingRoom?.isPublic !== undefined ? existingRoom.isPublic : true),
+              };
+            });
+          
+          setAvailableRooms(formattedRooms);
+        }
+      } catch (error) {
+        // 에러 발생 시 조용히 처리 (Polling은 계속 진행)
+        console.log('방 인원 Polling 실패:', error.message);
+      }
+    }, 5000); // 5초마다 확인
+    
+    return () => {
+      clearInterval(roomInfoPolling);
+    };
+  }, [isInitialLoadComplete.current]);
 
   // 참여중인 채팅방 목록이 변경될 때마다 AsyncStorage에 저장
   useEffect(() => {
