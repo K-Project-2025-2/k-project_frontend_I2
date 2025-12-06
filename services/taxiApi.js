@@ -195,10 +195,15 @@ export const joinRoom = async (roomCode) => {
 };
 
 // 방 나가기
-// ✅ Swagger에 추가됨: POST /api/taxi/rooms/leave
+// ✅ Swagger: POST /api/taxi/rooms/leave
+// - 방장도 나갈 수 있습니다. 방장이 나가면 남은 인원 중 가장 먼저 참여한 사용자가 방장이 됩니다.
+// - 모든 사용자가 나가면 방은 삭제됩니다.
+// - 방 코드로 지정하며, 퇴장 후 정원이 남으면 상태가 OPEN으로 갱신됩니다.
 export const leaveRoom = async (roomCode) => {
   try {
     const headers = await getAuthHeaders();
+    console.log('방 나가기 API 호출:', roomCode);
+    
     const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/leave`, {
       method: 'POST',
       headers,
@@ -207,18 +212,33 @@ export const leaveRoom = async (roomCode) => {
       }),
     });
 
+    console.log('방 나가기 응답 상태:', response.status, response.statusText);
+
     if (response.status === 200) {
       const data = await response.json();
+      console.log('방 나가기 성공:', data);
       return data;
     } else if (response.status === 400) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '정산이 완료되지 않아 나갈 수 없습니다.');
+      const errorMessage = error.message || error.error || '정산이 완료되지 않아 나갈 수 없습니다.';
+      console.error('방 나가기 에러 (400):', errorMessage);
+      throw new Error(errorMessage);
     } else {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '방 나가기 실패');
+      const errorMessage = error.message || error.error || `방 나가기 실패 (${response.status})`;
+      console.error('방 나가기 에러:', {
+        status: response.status,
+        statusText: response.statusText,
+        error,
+      });
+      throw new Error(errorMessage);
     }
   } catch (error) {
-    console.error('방 나가기 에러:', error);
+    console.error('방 나가기 에러 상세:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
     throw error;
   }
 };
