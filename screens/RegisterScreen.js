@@ -4,10 +4,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   StatusBar,
   Alert,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { sendVerificationCode, verifyCode, signup } from '../services/authApi';
@@ -110,10 +112,11 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      
-      <View style={styles.card}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
+        
+        <View style={styles.card}>
         <Text style={styles.title}>회원가입</Text>
         
         {/* 이름 */}
@@ -258,6 +261,7 @@ const RegisterScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
     </View>
+    </TouchableWithoutFeedback>
   );
 };
 

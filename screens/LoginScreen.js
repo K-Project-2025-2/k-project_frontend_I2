@@ -4,10 +4,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   StatusBar,
   Alert,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { login } from '../services/authApi';
 
@@ -57,9 +59,10 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      <View style={styles.card}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
+        <View style={styles.card}>
         <Text style={styles.title}>로그인</Text>
 
         <View style={styles.inputSection}>
@@ -116,6 +119,7 @@ const LoginScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
     </View>
+    </TouchableWithoutFeedback>
   );
 };
 

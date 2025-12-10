@@ -196,14 +196,12 @@ export const joinRoom = async (roomCode) => {
 
 // 방 나가기
 // ✅ Swagger: POST /api/taxi/rooms/leave
-// - 방장도 나갈 수 있습니다. 방장이 나가면 남은 인원 중 가장 먼저 참여한 사용자가 방장이 됩니다.
-// - 모든 사용자가 나가면 방은 삭제됩니다.
-// - 방 코드로 지정하며, 퇴장 후 정원이 남으면 상태가 OPEN으로 갱신됩니다.
+// 요청: { "roomCode": "123456" }
+// 응답: { id, roomCode, meetingPoint, destination, meetingTime, capacity, status, memberCount, leaderId }
+// 방장은 퇴장할 수 없습니다. 퇴장 후 정원이 남으면 상태가 OPEN으로 갱신됩니다.
 export const leaveRoom = async (roomCode) => {
   try {
     const headers = await getAuthHeaders();
-    console.log('방 나가기 API 호출:', roomCode);
-    
     const response = await fetch(`${API_BASE_URL}/api/taxi/rooms/leave`, {
       method: 'POST',
       headers,
@@ -212,33 +210,24 @@ export const leaveRoom = async (roomCode) => {
       }),
     });
 
-    console.log('방 나가기 응답 상태:', response.status, response.statusText);
-
     if (response.status === 200) {
       const data = await response.json();
-      console.log('방 나가기 성공:', data);
       return data;
     } else if (response.status === 400) {
       const error = await response.json().catch(() => ({}));
-      const errorMessage = error.message || error.error || '정산이 완료되지 않아 나갈 수 없습니다.';
-      console.error('방 나가기 에러 (400):', errorMessage);
-      throw new Error(errorMessage);
+      const errorMessage = error.message || error.error || '';
+      // "방장은 퇴장할 수 없습니다" 메시지 확인
+      if (errorMessage.includes('방장') || errorMessage.includes('퇴장할 수 없습니다')) {
+        throw new Error('방장은 퇴장할 수 없습니다.');
+      }
+      // 기타 400 에러 (정산 미완료 등)
+      throw new Error(errorMessage || '정산이 완료되지 않아 나갈 수 없습니다.');
     } else {
       const error = await response.json().catch(() => ({}));
-      const errorMessage = error.message || error.error || `방 나가기 실패 (${response.status})`;
-      console.error('방 나가기 에러:', {
-        status: response.status,
-        statusText: response.statusText,
-        error,
-      });
-      throw new Error(errorMessage);
+      throw new Error(error.message || error.error || '방 나가기 실패');
     }
   } catch (error) {
-    console.error('방 나가기 에러 상세:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    });
+    console.error('방 나가기 에러:', error);
     throw error;
   }
 };
@@ -270,6 +259,10 @@ export const closeRoom = async (roomId) => {
 
 // 채팅 메시지 보내기
 // ✅ Swagger에 추가됨: POST /api/taxi/rooms/{roomCode}/messages
+// 메시지 전송
+// ✅ Swagger: POST /api/taxi/rooms/{roomCode}/messages
+// 요청: { content: "메시지 내용" }
+// 응답: { id, roomCode, senderId, senderEmail, content, createdAt }
 export const sendMessage = async (roomCode, content) => {
   try {
     const headers = await getAuthHeaders();
@@ -297,35 +290,72 @@ export const sendMessage = async (roomCode, content) => {
 };
 
 // 채팅 메시지 조회
-// ✅ Swagger에 추가됨: GET /api/taxi/rooms/{roomCode}/messages
+// ✅ Swagger: GET /api/taxi/rooms/{roomCode}/messages
+// Parameters: page (기본 0), size (기본 50, 최대 200)
+// 응답 형식: [{ id, roomCode, senderId, senderEmail, content, createdAt }]
 export const getMessages = async (roomCode, page = 0, size = 50) => {
   try {
+    if (!roomCode) {
+      console.error('getMessages: roomCode가 없습니다.');
+      return [];
+    }
+    
     const headers = await getAuthHeaders();
-    let url = `${API_BASE_URL}/api/taxi/rooms/${roomCode}/messages?page=${page}&size=${size}`;
+    // size는 최대 200으로 제한
+    const validSize = Math.min(size, 200);
+    let url = `${API_BASE_URL}/api/taxi/rooms/${roomCode}/messages?page=${page}&size=${validSize}`;
+    
+    console.log('getMessages API 호출:', url);
+    console.log('getMessages headers:', headers);
 
     const response = await fetch(url, {
       method: 'GET',
       headers,
     });
 
+    console.log('getMessages 응답 상태:', response.status);
+
     if (response.status === 200) {
       const data = await response.json();
-      // Swagger 명세: 배열로 직접 반환하거나 Page 객체로 반환
-      // 배열인 경우 그대로 반환, 객체인 경우 content 필드 확인
+      console.log('getMessages 응답 데이터:', JSON.stringify(data, null, 2));
+      
+      // Swagger 명세: 배열로 직접 반환
       if (Array.isArray(data)) {
+        console.log('getMessages: 배열로 반환됨, 개수:', data.length);
         return data;
       } else if (data && Array.isArray(data.content)) {
-        return data; // Page 객체 반환 (content 필드 포함)
+        // Page 객체인 경우 content 필드 반환
+        console.log('getMessages: Page 객체로 반환됨, content 개수:', data.content.length);
+        return data.content;
       } else {
-        return data.messages || data.data || [];
+        // 기타 형식 처리
+        const messages = data.messages || data.data || [];
+        console.log('getMessages: 기타 형식, 개수:', messages.length);
+        return Array.isArray(messages) ? messages : [];
       }
+    } else if (response.status === 404) {
+      // 방이 없거나 접근 권한이 없는 경우 빈 배열 반환
+      const errorText = await response.text().catch(() => '');
+      console.log('메시지 조회 실패 (404): 방을 찾을 수 없거나 접근 권한이 없습니다.', errorText);
+      return [];
+    } else if (response.status === 401) {
+      // 인증 실패
+      const errorText = await response.text().catch(() => '');
+      console.log('메시지 조회 실패 (401): 인증이 필요합니다.', errorText);
+      return [];
     } else {
+      const errorText = await response.text().catch(() => '');
+      console.log('메시지 조회 실패:', response.status, errorText);
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error.error || '메시지 조회 실패');
+      throw new Error(error.message || error.error || `메시지 조회 실패 (${response.status})`);
     }
   } catch (error) {
     console.error('메시지 조회 에러:', error);
-    throw error;
+    // 네트워크 에러 등 발생 시 빈 배열 반환 (에러를 throw하지 않음)
+    if (error.message && error.message.includes('메시지 조회 실패')) {
+      throw error;
+    }
+    return [];
   }
 };
 

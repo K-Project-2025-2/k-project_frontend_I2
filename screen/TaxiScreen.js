@@ -108,28 +108,43 @@ const TaxiScreen = ({ navigation }) => {
           });
           loadedParticipatingRooms = filteredRooms;
           setParticipatingRooms(filteredRooms);
+          // AsyncStorage에 저장 (백엔드 데이터와 동기화)
+          await saveParticipatingRooms(filteredRooms).catch(err => {
+            console.error('AsyncStorage 저장 실패:', err);
+          });
           // 초기 로드 완료 표시
           isInitialLoadComplete.current = true;
         } else {
-          // API가 빈 배열을 반환하면 실제로 참여중인 방이 없다는 의미
-          // 따라서 AsyncStorage도 비워야 함 (나간 방이 다시 나타나지 않도록)
-          loadedParticipatingRooms = [];
-          setParticipatingRooms([]);
-          await saveParticipatingRooms([]).catch(err => {
-            console.error('AsyncStorage 비우기 실패:', err);
-          });
+          // API가 빈 배열을 반환한 경우
+          // 백엔드가 정상적으로 빈 배열을 반환했다면 실제로 참여중인 방이 없는 것
+          // 하지만 네트워크 에러나 일시적 문제일 수도 있으므로, AsyncStorage에 저장된 데이터가 있으면 유지
+          if (loadedParticipatingRooms.length > 0) {
+            // AsyncStorage에 저장된 데이터가 있으면 유지 (백엔드가 일시적으로 문제가 있을 수 있음)
+            console.log('백엔드가 빈 배열을 반환했지만 AsyncStorage에 데이터가 있어 유지:', loadedParticipatingRooms.length);
+            setParticipatingRooms(loadedParticipatingRooms);
+          } else {
+            // AsyncStorage에도 데이터가 없으면 실제로 참여중인 방이 없는 것
+            loadedParticipatingRooms = [];
+            setParticipatingRooms([]);
+            await saveParticipatingRooms([]).catch(err => {
+              console.error('AsyncStorage 비우기 실패:', err);
+            });
+          }
           // 초기 로드 완료 표시
           isInitialLoadComplete.current = true;
         }
       } catch (error) {
         console.error('참여중인 채팅방 목록 불러오기 실패:', error);
-        // 에러 발생 시 빈 배열로 설정 (나간 방이 다시 나타나지 않도록)
-        loadedParticipatingRooms = [];
-        setParticipatingRooms([]);
-        // AsyncStorage도 비워서 나간 방이 다시 나타나지 않도록 함
-        await saveParticipatingRooms([]).catch(err => {
-          console.error('AsyncStorage 비우기 실패:', err);
-        });
+        // 에러 발생 시 기존 데이터 유지 (네트워크 에러나 일시적 문제일 수 있음)
+        if (loadedParticipatingRooms.length > 0) {
+          // AsyncStorage에 저장된 데이터가 있으면 유지
+          console.log('초기 로드 에러: AsyncStorage 데이터 유지:', loadedParticipatingRooms.length);
+          setParticipatingRooms(loadedParticipatingRooms);
+        } else {
+          // AsyncStorage에도 데이터가 없으면 빈 배열로 설정
+          loadedParticipatingRooms = [];
+          setParticipatingRooms([]);
+        }
         // 초기 로드 완료 표시
         isInitialLoadComplete.current = true;
       }
@@ -234,7 +249,21 @@ const TaxiScreen = ({ navigation }) => {
               };
             });
           
-          setParticipatingRooms(formattedRooms);
+          // 데모 데이터 필터링
+          const filteredRooms = formattedRooms.filter(room => {
+            const roomCode = room.roomCode || room.invite_code || '';
+            return !roomCode.startsWith('100');
+          });
+          
+          setParticipatingRooms(filteredRooms);
+          // AsyncStorage에도 저장 (백엔드 데이터와 동기화)
+          await saveParticipatingRooms(filteredRooms).catch(err => {
+            console.error('AsyncStorage 저장 실패:', err);
+          });
+        } else {
+          // 백엔드가 빈 배열을 반환한 경우, 기존 데이터 유지 (일시적 문제일 수 있음)
+          // 실제로 방을 나갔다면 handleLeaveRoomFromChat에서 제거되므로 여기서는 유지
+          console.log('Polling: 백엔드가 빈 배열을 반환했지만 기존 데이터 유지');
         }
         
         // 참여 가능한 방 목록 업데이트
@@ -485,13 +514,26 @@ const TaxiScreen = ({ navigation }) => {
           return !roomCode.startsWith('100');
         });
         setParticipatingRooms(filteredRooms);
-      } else {
-        // 백엔드가 빈 배열을 반환하거나 null/undefined를 반환하면 참여중인 방 목록을 비웁니다 (영구적으로 나간 처리)
-        setParticipatingRooms([]);
-        // AsyncStorage도 비워서 나간 방이 다시 나타나지 않도록 함
-        await saveParticipatingRooms([]).catch(err => {
-          console.error('AsyncStorage 비우기 실패:', err);
+        // AsyncStorage에도 저장 (백엔드 데이터와 동기화)
+        await saveParticipatingRooms(filteredRooms).catch(err => {
+          console.error('AsyncStorage 저장 실패:', err);
         });
+      } else {
+        // 백엔드가 빈 배열을 반환한 경우
+        // 네트워크 에러나 일시적 문제일 수 있으므로, 현재 상태 유지
+        // 실제로 방을 나갔다면 handleLeaveRoomFromChat에서 제거되므로 여기서는 유지
+        const currentRooms = await getParticipatingRooms();
+        if (currentRooms && currentRooms.length > 0) {
+          console.log('새로고침: 백엔드가 빈 배열을 반환했지만 기존 데이터 유지:', currentRooms.length);
+          // 기존 데이터 유지 (AsyncStorage에서 가져온 데이터)
+          setParticipatingRooms(currentRooms);
+        } else {
+          // AsyncStorage에도 데이터가 없으면 실제로 참여중인 방이 없는 것
+          setParticipatingRooms([]);
+          await saveParticipatingRooms([]).catch(err => {
+            console.error('AsyncStorage 비우기 실패:', err);
+          });
+        }
       }
       
       // 전체 방 목록 새로고침
@@ -539,15 +581,18 @@ const TaxiScreen = ({ navigation }) => {
         console.log('새로고침 - 전체 방 목록이 비어있음');
         setAvailableRooms([]);
       }
-    } catch (error) {
-      console.error('방 목록 새로고침 실패:', error);
-      // 에러 발생 시에도 참여중인 방 목록을 비워서 나간 방이 다시 나타나지 않도록 함
-      setParticipatingRooms([]);
-      // AsyncStorage도 비워서 나간 방이 다시 나타나지 않도록 함
-      await saveParticipatingRooms([]).catch(err => {
-        console.error('AsyncStorage 비우기 실패:', err);
-      });
-    }
+      } catch (error) {
+        console.error('방 목록 새로고침 실패:', error);
+        // 에러 발생 시 기존 데이터 유지 (네트워크 에러나 일시적 문제일 수 있음)
+        const currentRooms = await getParticipatingRooms();
+        if (currentRooms && currentRooms.length > 0) {
+          console.log('새로고침 에러: 기존 데이터 유지:', currentRooms.length);
+          setParticipatingRooms(currentRooms);
+        } else {
+          // AsyncStorage에도 데이터가 없으면 빈 배열로 설정
+          setParticipatingRooms([]);
+        }
+      }
   };
 
   // 방 생성 완료 후 채팅방으로 이동
